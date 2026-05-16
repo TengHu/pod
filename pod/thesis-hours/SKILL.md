@@ -101,10 +101,28 @@ Set `THESIS_SLUG=$SLUG` for the rest of the skill.
 
 ## Step 1: Context recovery
 
-If the thesis folder exists, scan it:
+Count parallel sessions and recover thesis-specific context.
 
 ```bash
 eval "$(~/Code/pod/bin/pod-paths)"
+
+# Parallel session awareness (ETHOS §8)
+mkdir -p "$POD_BOOK/_sessions"
+touch "$POD_BOOK/_sessions/$PPID"
+POD_PARALLEL_SESSIONS=$(find "$POD_BOOK/_sessions" -mmin -120 -type f 2>/dev/null | wc -l | tr -d ' ')
+find "$POD_BOOK/_sessions" -mmin +120 -type f -exec rm {} + 2>/dev/null || true
+echo "POD_PARALLEL_SESSIONS: $POD_PARALLEL_SESSIONS"
+```
+
+If `POD_PARALLEL_SESSIONS >= 3`, enter **re-grounding mode** per ETHOS §8:
+every subsequent AUQ in this session prefixes its brief with the thesis
+context line (`Thesis: <slug> | Last touched: <date> | Session N of M`),
+and status messages prefix with the thesis slug. Carry this through to
+the end of the skill.
+
+Then scan the thesis folder for prior artifacts:
+
+```bash
 DIR="$POD_THESES/$THESIS_SLUG"
 if [ -d "$DIR" ]; then
   echo "--- RECENT ARTIFACTS ---"
@@ -370,7 +388,38 @@ If yes, append via the helper:
 
 ---
 
-## Step 8: Confirm and stop
+## Step 8: Reflect and log learnings (ETHOS §10)
+
+Before reporting completion, decide if this session surfaced anything
+worth remembering for future sessions.
+
+**Log if any of:**
+
+- The user explicitly said "remember this" or "save this learning"
+- You hit a project-specific quirk worth recording (custom file format,
+  unusual question, gotcha)
+- A cross-thesis insight surfaced (a pattern, a useful framing, an
+  always-true premise)
+
+**Skip if** the session was routine and nothing surprised either party.
+
+To log:
+
+```bash
+~/Code/pod/bin/pod-learnings-log "$(jq -n \
+  --arg skill "pod-thesis-hours" \
+  --arg thesis "$THESIS_SLUG" \
+  --arg type "<pattern|pitfall|preference|observation>" \
+  --arg key "<short-kebab-id>" \
+  --arg insight "<one sentence in your voice>" \
+  '{skill:$skill, thesis:$thesis, type:$type, key:$key, insight:$insight}')"
+```
+
+Do not announce the log unless it's substantive (don't say "I logged a
+learning" for every routine save). If you do log something, mention it
+in one line: "Logged learning: <insight>."
+
+## Step 9: Confirm and stop
 
 Tell the user:
 
@@ -390,6 +439,9 @@ Stop there. Do not summarize the thesis content (that's already in the
 file). Do not offer next-step recommendations beyond the three commands
 above. Do not editorialize.
 
+In re-grounding mode (POD_PARALLEL_SESSIONS >= 3), prefix the report
+header with `[$THESIS_SLUG]` so it's identifiable across windows.
+
 ---
 
 ## Hard rules
@@ -403,3 +455,5 @@ above. Do not editorialize.
 - **Never judge the thesis.** No "consider risks", no "have you thought about", no Buffett quotes. Capture is the job. `/pod-bear-case` (later) is where critique lives.
 - **Never overwrite an existing file.** Collision suffix on same-day-same-kind. Filename is the canonical sort order.
 - **Voice rules apply** to your own prose (the README updates, the user-facing messages). The user's verbatim answers are their voice, not yours.
+- **Error messages are for AI agents (ETHOS §9).** Every error tells the next action. Never just "file not found" or raw exception text. Always: what failed precisely, what valid options exist, what to run next.
+- **Re-ground when parallel (ETHOS §8).** When `POD_PARALLEL_SESSIONS >= 3`, prefix every AUQ brief with `Thesis: <slug> | Last touched: <date>` and every status message with `[<slug>]`. Assume the user can't remember which window said what.

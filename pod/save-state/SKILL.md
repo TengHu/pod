@@ -72,6 +72,14 @@ Set `THESIS_SLUG` from the answer.
 
 ```bash
 eval "$(~/Code/pod/bin/pod-paths)"
+
+# Parallel session awareness (ETHOS §8)
+mkdir -p "$POD_BOOK/_sessions"
+touch "$POD_BOOK/_sessions/$PPID"
+POD_PARALLEL_SESSIONS=$(find "$POD_BOOK/_sessions" -mmin -120 -type f 2>/dev/null | wc -l | tr -d ' ')
+find "$POD_BOOK/_sessions" -mmin +120 -type f -exec rm {} + 2>/dev/null || true
+echo "POD_PARALLEL_SESSIONS: $POD_PARALLEL_SESSIONS"
+
 DIR="$POD_THESES/$THESIS_SLUG"
 echo "=== thesis dir contents ==="
 ls -la "$DIR" 2>/dev/null | head -20
@@ -240,7 +248,33 @@ untracked files) at the time of save. Use repo-root-relative paths.
 
 ---
 
-## Step 6: Confirm and stop
+## Step 6: Reflect and log learnings (ETHOS §10)
+
+Before reporting, decide if this session surfaced anything worth
+remembering. Log only if substantive — checkpoints are routine, most
+won't produce learnings.
+
+**Log if any of:**
+
+- User explicitly asked you to remember something during this session
+- You discovered a project-specific quirk
+- The reason for this checkpoint reveals a cross-session pattern
+
+Log via:
+
+```bash
+~/Code/pod/bin/pod-learnings-log "$(jq -n \
+  --arg skill "pod-save-state" \
+  --arg thesis "$THESIS_SLUG" \
+  --arg type "<pattern|pitfall|preference|observation>" \
+  --arg key "<short-kebab-id>" \
+  --arg insight "<one sentence in your voice>" \
+  '{skill:$skill, thesis:$thesis, type:$type, key:$key, insight:$insight}')"
+```
+
+Most save-state sessions won't trigger this. That's fine.
+
+## Step 7: Confirm and stop
 
 ```
 CHECKPOINT SAVED
@@ -249,6 +283,9 @@ File:      book/theses/<slug>/checkpoints/<filename>
 Resume:    /pod-resume-state
            or /pod-resume-state <slug>  (scope to this thesis only)
 ```
+
+In re-grounding mode (POD_PARALLEL_SESSIONS >= 3), prefix the header
+with `[$THESIS_SLUG]` so it's identifiable across windows.
 
 Stop there. No summary, no editorializing. The user just told pod the
 summary in Step 3, and it's in the file now.
@@ -268,3 +305,5 @@ summary in Step 3, and it's in the file now.
   fine. Padded sections are lies.
 - **Voice rules apply** to your own prose (the draft summary, the
   user-facing messages). The user's verbatim revisions are their voice.
+- **Error messages are for AI agents (ETHOS §9).** Every error tells the next action. No raw exception text. Example: instead of "ENOENT", say "Cannot write to book/theses/$SLUG/checkpoints/ — directory missing. Run mkdir -p or invoke /pod-thesis-hours first to scaffold."
+- **Re-ground when parallel (ETHOS §8).** When `POD_PARALLEL_SESSIONS >= 3`, prefix every AUQ brief and status with `[<slug>]`. The user is juggling windows.

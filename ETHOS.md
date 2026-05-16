@@ -168,6 +168,125 @@ will consume the verdict. Not required for every skill.
 
 ---
 
+## 8. Parallel session awareness (re-grounding mode)
+
+The expected pod usage pattern is multiple Claude Code sessions running
+in parallel: one window per active thesis, sometimes one per workspace.
+Context gets thin fast in that mode. Each session knows about its own
+conversation, but can't see what's happening in the others.
+
+**Rule:** every skill counts active sessions in its preamble. When 3+
+are detected, the skill enters re-grounding mode.
+
+**Detection:**
+
+```bash
+mkdir -p book/_sessions
+touch book/_sessions/"$PPID"
+POD_PARALLEL_SESSIONS=$(find book/_sessions -mmin -120 -type f 2>/dev/null | wc -l | tr -d ' ')
+find book/_sessions -mmin +120 -type f -exec rm {} + 2>/dev/null || true
+echo "POD_PARALLEL_SESSIONS: $POD_PARALLEL_SESSIONS"
+```
+
+Active = file in `book/_sessions/` modified in last 120 minutes. Old
+markers auto-clean.
+
+**Behavior when `POD_PARALLEL_SESSIONS >= 3`:**
+
+- Every AskUserQuestion brief includes a thesis-context header line:
+  `Thesis: <slug> | Last touched: <date> | Session 3 of 4`
+- Status messages always prefix with the thesis slug
+- Don't reference "earlier in this session" without restating which session
+- Re-state which file you're about to write before writing
+- Re-ground the user on what artifact came from where
+
+The principle: when juggling 3+ windows, the user can't reliably remember
+which conversation said what. pod compensates by re-grounding on every
+decision point.
+
+---
+
+## 9. Error messages are written for AI agents, not for humans
+
+Every error message tells the agent (and indirectly, the user) what to
+do next. A bare error description is half a message.
+
+**Universal rules:**
+
+- State the failure precisely (which file, which input, which expectation)
+- List valid options when applicable (e.g. existing slugs when slug not found)
+- Name the next concrete action (which skill to run, which file to create)
+- For data errors, suggest the skill that can fix the state
+- Never leak underlying tool stack traces
+
+**Good:**
+
+> "Thesis 'apld' not found in book/theses/. Available theses:
+> apld-utility-call, crwv-framework, miner-to-ai. Run /pod-thesis-hours
+> to create a new thesis, or pick one of the existing slugs."
+
+> "Cannot write to book/_events/timeline.jsonl: parent directory missing.
+> Run `mkdir -p book/_events` and retry, or invoke /pod-thesis-hours first
+> to scaffold the workspace."
+
+**Bad:**
+
+> "Thesis not found."
+
+> "ENOENT: no such file or directory."
+
+When a skill catches an exception, it must transform the message into the
+above shape before surfacing to the user. Raw exception messages are a
+bug — they leak abstraction.
+
+---
+
+## 10. Operational self-improvement
+
+At the end of every skill session, if something happened that's worth
+remembering for future sessions, the skill logs it to
+`book/_events/learnings.jsonl` via `~/Code/pod/bin/pod-learnings-log`.
+
+**Log when ANY of:**
+
+- User explicitly says "remember this" or "save this as a learning"
+- Skill discovered a project-specific quirk (a path, a convention,
+  a custom file format)
+- Skill hit an undocumented gotcha (Plaid institution gating, a
+  command flag that doesn't work as documented, a data shape surprise)
+- Cross-thesis insight surfaced that's worth applying elsewhere
+  (a pattern that shows up across two theses, a question worth asking
+  on every future thesis)
+
+**Skip when:**
+
+- Routine successful operation with nothing surprising
+- One-time transient errors (network blip, jq parse on partial output)
+- User didn't react to or comment on whatever happened
+
+**Log format:**
+
+```bash
+~/Code/pod/bin/pod-learnings-log "$(jq -n \
+  --arg skill "<skill-name>" \
+  --arg thesis "<slug-or-empty>" \
+  --arg type "<pattern|pitfall|preference|observation>" \
+  --arg key "<short-kebab-case-id>" \
+  --arg insight "<one sentence, in your voice>" \
+  '{skill:$skill, thesis:$thesis, type:$type, key:$key, insight:$insight}')"
+```
+
+**Future skill invocations** should grep
+`book/_events/learnings.jsonl` for relevant prior insights at preamble
+time and surface them in their context recovery report. (Not yet
+implemented in MVP skills; v1 work.)
+
+The learnings file is the cross-skill memory loop. Without it, every
+session re-derives the same gotchas. With it, pod gets smarter on the
+user's specific setup over time.
+
+---
+
 ## What pod does NOT define
 
 pod does not have opinions about:

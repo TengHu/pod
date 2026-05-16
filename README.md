@@ -105,6 +105,7 @@ book/
 │   ├── timeline.jsonl             (every skill run, every thesis)
 │   ├── learnings.jsonl            (durable lessons across theses)
 │   └── eureka.jsonl               (first-principles insights, your alpha)
+├── _sessions/                     (ephemeral parallel-session markers, add to .gitignore)
 └── theses/
     └── apld-utility-call/
         ├── README.md              (current state, position, status)

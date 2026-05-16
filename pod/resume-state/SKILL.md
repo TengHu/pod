@@ -56,6 +56,13 @@ remembering. The arg is the override, not the default.
 ```bash
 eval "$(~/Code/pod/bin/pod-paths)"
 
+# Parallel session awareness (ETHOS §8)
+mkdir -p "$POD_BOOK/_sessions"
+touch "$POD_BOOK/_sessions/$PPID"
+POD_PARALLEL_SESSIONS=$(find "$POD_BOOK/_sessions" -mmin -120 -type f 2>/dev/null | wc -l | tr -d ' ')
+find "$POD_BOOK/_sessions" -mmin +120 -type f -exec rm {} + 2>/dev/null || true
+echo "POD_PARALLEL_SESSIONS: $POD_PARALLEL_SESSIONS"
+
 if [ -n "$SLUG_FILTER" ]; then
   # Scope to one thesis
   SEARCH_DIR="$POD_THESES/$SLUG_FILTER/checkpoints"
@@ -204,6 +211,26 @@ If D, stop with a brief acknowledgment.
 `THESIS_FROM_CHECKPOINT` is the `thesis:` field from the frontmatter
 of the loaded file, not anything the user typed.
 
+## Step 6: Reflect and log learnings (ETHOS §10)
+
+Resume-state is mostly a read operation, so logging here is rare.
+Skip unless the user explicitly says "remember this" during the
+post-resume conversation, or you noticed a cross-thesis pattern
+(e.g., user is resuming the same thesis for the 5th day in a row,
+suggesting it's a long-running active position worth flagging).
+
+If logging:
+
+```bash
+~/Code/pod/bin/pod-learnings-log "$(jq -n \
+  --arg skill "pod-resume-state" \
+  --arg thesis "$THESIS_FROM_CHECKPOINT" \
+  --arg type "<pattern|observation>" \
+  --arg key "<short-kebab-id>" \
+  --arg insight "<one sentence>" \
+  '{skill:$skill, thesis:$thesis, type:$type, key:$key, insight:$insight}')"
+```
+
 ---
 
 ## List-mode-only flow
@@ -219,7 +246,7 @@ have I been doing" question is greppable later. Skip Steps 3-4.
 - **Never ask for user input via plain chat.** Always `AskUserQuestion`.
   If AUQ is unavailable, BLOCKED.
 - **Never modify any file.** This skill reads checkpoints and writes
-  one timeline event. That is the whole job.
+  one timeline event (and one optional learning). That is the whole job.
 - **Never paraphrase the checkpoint.** Quote verbatim. The user wrote
   it for themselves to read.
 - **Cross-thesis default is intentional.** With no `<slug>` argument,
@@ -228,3 +255,5 @@ have I been doing" question is greppable later. Skip Steps 3-4.
 - **Default mode is newest, not picker.** With no `list` keyword, just
   load the newest checkpoint. The user is asking "where was I", not
   "give me a menu."
+- **Error messages are for AI agents (ETHOS §9).** Empty-checkpoint case tells the next action: "No checkpoints saved yet. Run /pod-save-state mid-session to create one." Stale paths point at the fix. No raw filesystem errors.
+- **Re-ground when parallel (ETHOS §8).** When `POD_PARALLEL_SESSIONS >= 3`, the post-load presentation must include `[<thesis-slug>]` prefixes so the user knows which window is now resuming which thesis. This is the most likely place a parallel-session confusion happens — agent loads thesis A's checkpoint into a window where the user thought they were on thesis B.
