@@ -140,5 +140,10 @@ Uninstall:     follow ~/Code/pod/uninstall.md
   by design (no skill-namespace pollution across projects).
 - The `pod-` prefix is mandatory. It prevents collisions if the user
   installs other skill packs alongside.
+- **When you need user input, use `AskUserQuestion`. Never plain chat
+  prompts.** This applies to the existing-install handling in Step 1,
+  any path overrides in Step 0, and anything ambiguous. If AUQ is not
+  available, stop and report `BLOCKED — AskUserQuestion unavailable`.
 - Do not prompt the user for things you can detect with Bash. Defaults
-  are sane; ask only when something is genuinely missing or ambiguous.
+  are sane; ask via AUQ only when something is genuinely missing or
+  ambiguous.

@@ -52,9 +52,23 @@ the decision moment.
 
 ---
 
-## 3. AskUserQuestion as decision brief
+## 3. AskUserQuestion for every user input
 
-Every question pod asks is a structured brief, not a vague prompt.
+**Hard rule: any time a skill needs information from the user, it uses
+`AskUserQuestion`. No exceptions.**
+
+This applies to:
+- Decisions (which thesis, which mode, refresh or update, log or skip)
+- Disambiguation (multiple existing slugs, multiple candidate files)
+- Confirmations (destructive actions, irreversible writes)
+- Free-form input that has a default (use AUQ with "type your own"
+  option, recommend the default)
+
+What pod does **not** do: ask via plain chat text like "what's the
+thesis slug?" or "do you want to continue?". Plain prompts are vague,
+leave no audit trail, and let the model fall back to assumption.
+
+**The decision brief format** (use for every AUQ):
 
 ```
 D<N> — <one-line question>
@@ -73,8 +87,18 @@ B) <option>
 Net: <one-line synthesis of the tradeoff>
 ```
 
+For pure prose capture (e.g., "write out the thesis in one sentence"),
+the question can be simpler, but it is still an `AskUserQuestion` call
+with the question shown, recommended phrasing, and a "skip" option.
+Never just inline-prompt and wait for chat reply.
+
 No forced numeric scores (no 0-10 conviction, no R:R asymmetry).
 Judgment lives in prose in your thesis docs.
+
+**If AskUserQuestion is not available** in the current tool environment,
+the skill is BLOCKED. Stop, tell the user `BLOCKED — AskUserQuestion
+unavailable`, and wait. Do not fall back to plain prompts. Do not
+auto-decide.
 
 ---
 

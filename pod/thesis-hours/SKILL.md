@@ -183,18 +183,37 @@ were used):
 
 ## Step 3: Ask the forcing questions
 
-For each question, present it conversationally. Capture the user's
-answer in your working memory.
+For each question, use `AskUserQuestion`. Hard rule from
+`~/Code/pod/ETHOS.md` §3: any time the skill needs info from the user,
+it uses AUQ. Never plain chat prompts.
 
-**Do not bundle all questions into one AskUserQuestion.** Ask one at a
-time, conversationally. The user might want to think between questions,
-clarify scope, or skip one. That's fine. Note any skipped question as
-"skipped" in the output doc.
+Ask **one question per AUQ call**, in order. Do not bundle. The user
+might want to think between questions, clarify scope, or skip one.
+
+Format (lightweight for prose capture, not the full decision brief):
+
+```
+Q<N>/<total> — <verbatim question text>
+ELI10: <one-line reason this question matters in your own framing —
+        e.g., "captures the headline framing of the thesis", "names the
+        catalyst window", "names the falsifying scenario">
+Options:
+A) Type the answer (recommended)
+B) Skip this question
+```
+
+Selecting A puts the user into free-form text entry. Capture their
+answer verbatim into working memory keyed by `Q<N>`. Selecting B records
+the question as skipped.
 
 **Do not editorialize.** If the user's answer to "what would make you
 wrong" is "nothing, I'm certain", write that verbatim. Do not push
 back, do not say "consider these risks." Your job is capture, not
 critique. (`/pod-bear-case` will critique. This skill captures.)
+
+**If AskUserQuestion is not available** in the tool environment, stop
+and report `BLOCKED — AskUserQuestion unavailable` per ETHOS §3. Do not
+fall back to plain prompts.
 
 ---
 
@@ -374,6 +393,10 @@ above. Do not editorialize.
 
 ## Hard rules
 
+- **Never ask for user input via plain chat.** Use `AskUserQuestion`
+  for every choice, every disambiguation, every forcing question, every
+  confirmation. If AUQ is not available, the skill is BLOCKED. Stop and
+  report. Do not fall back to inline prompts.
 - **Never rewrite the user's answers.** Capture verbatim. Light typo fixes only.
 - **Never add forcing questions** the user did not write. The default 3 are the only ones pod adds, and only when `book/_questions/thesis-hours.md` is absent.
 - **Never judge the thesis.** No "consider risks", no "have you thought about", no Buffett quotes. Capture is the job. `/pod-bear-case` (later) is where critique lives.

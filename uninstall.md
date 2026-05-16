@@ -81,8 +81,12 @@ Delete the source too (irreversible without re-clone):
 
 - This procedure only touches `<workspace>/.claude/skills/pod-*`.
   Never delete files outside this scope, even if asked.
+- **When you need user input, use `AskUserQuestion`. Never plain chat
+  prompts.** The Step 2 confirmation is mandatory and must be AUQ.
+  If AUQ is not available, stop and report `BLOCKED — AskUserQuestion
+  unavailable`. Do not auto-delete.
 - If the user asks to also remove `~/Code/pod` (the source repo),
-  surface it as a separate confirmation. Deleting the source is
-  irreversible without a fresh `git clone`.
+  surface it as a separate AskUserQuestion confirmation. Deleting the
+  source is irreversible without a fresh `git clone`.
 - This procedure does not touch `book/` under any circumstance. That's
   the user's work product.
