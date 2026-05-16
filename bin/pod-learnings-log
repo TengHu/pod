@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# pod-learnings-log — append a learning to book/_events/learnings.jsonl
+#
+# Usage:
+#   pod-learnings-log '{"skill":"...","thesis":"...","type":"pattern","key":"...","insight":"..."}'
+#
+# Required: skill, type, key, insight.
+# type in: pattern | pitfall | preference | observation
+# key: alphanumeric + hyphens/underscores only
+#
+# Rejects insight text matching prompt-injection patterns (since learnings
+# get loaded into agent context later, injection here is real risk).
+#
+# Adapted from gstack-learnings-log (MIT, gstack project), simplified:
+# - jq instead of bun
+# - Local writes
+# - Smaller injection-pattern allowlist (still covers the high-value cases)
+set -euo pipefail
+
+INPUT="${1:-}"
+[ -n "$INPUT" ] || { echo "ERROR: no JSON input" >&2; exit 1; }
+
+eval "$("$(dirname "$0")/pod-paths")"
+mkdir -p "$POD_EVENTS"
+
+command -v jq >/dev/null 2>&1 || {
+  echo "WARN: jq not installed, skipping learnings log" >&2
+  exit 0
+}
+
+VALIDATED=$(printf '%s' "$INPUT" | jq -c '
+  # Required fields
+  if .skill == null or .type == null or .key == null or .insight == null then
+    error("missing required fields: skill, type, key, insight")
+  else . end
+  # type allowlist
+  | if (.type | test("^(pattern|pitfall|preference|observation)$") | not) then
+      error("type must be one of: pattern, pitfall, preference, observation")
+    else . end
+  # key sanitization
+  | if (.key | test("^[a-zA-Z0-9_-]+$") | not) then
+      error("key must be alphanumeric with - and _ only")
+    else . end
+  # Prompt-injection scan on insight
+  | if (.insight | ascii_downcase
+        | test("ignore (all )?previous|you are now |always output |override:|^system:|^assistant:|do not (report|flag|mention)")) then
+      error("insight contains suspicious instruction-like content")
+    else . end
+  | .ts = (.ts // (now | todateiso8601))
+' 2>/dev/null) || {
+  echo "WARN: invalid or suspicious input for learnings-log, skipping" >&2
+  exit 0
+}
+
+echo "$VALIDATED" >> "$POD_EVENTS/learnings.jsonl"

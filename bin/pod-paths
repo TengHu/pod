@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# pod-paths — emit canonical pod paths for the current workspace.
+#
+# Usage:
+#   eval "$(pod-paths)"   # sets POD_BOOK, POD_EVENTS, POD_THESES env vars
+#   pod-paths             # prints the assignments
+#
+# Walks up from cwd to find the nearest ancestor containing book/.
+# Fails if no book/ found (exits 1, prints error to stderr).
+#
+# Adapted from gstack-slug (MIT, gstack project), simplified for pod's
+# project-local layout (no global $POD_HOME, no slug cache).
+set -euo pipefail
+
+dir=$(pwd)
+BOOK=""
+while [ "$dir" != "/" ] && [ "$dir" != "." ]; do
+  if [ -d "$dir/book" ]; then
+    BOOK="$dir/book"
+    break
+  fi
+  dir=$(dirname "$dir")
+done
+
+if [ -z "$BOOK" ]; then
+  echo "ERROR: no book/ directory found from $(pwd) or any parent." >&2
+  echo "       pod needs a workspace with book/ at its root." >&2
+  exit 1
+fi
+
+echo "POD_BOOK=$BOOK"
+echo "POD_EVENTS=$BOOK/_events"
+echo "POD_THESES=$BOOK/theses"

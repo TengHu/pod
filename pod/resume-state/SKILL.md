@@ -2,26 +2,229 @@
 name: pod-resume-state
 description: |
   Pick up where you left off. Reads the most recent checkpoint across
-  ALL theses by default (cross-thesis resume). Pass a thesis slug to
-  scope to one thesis. Pass `list` to see the top 20.
-  STATUS: not implemented yet. See book/_design/2026-05-14-pod-ux-design.md.
+  ALL theses by default (cross-thesis resume — the Monday-morning case).
+  Pass a thesis slug to scope to one thesis. Pass `list` to see the
+  top 20 checkpoints across all theses.
 allowed-tools:
   - Bash
   - Read
   - Glob
   - Grep
   - AskUserQuestion
+triggers:
+  - resume state
+  - where was i
+  - pick up where i left off
+  - resume my work
+  - what was i doing
 ---
 
-# /pod-resume-state — Not implemented
+# /pod-resume-state — pick up where you left off
 
-This skill is part of pod's MVP plan but is not yet implemented.
+You are a session-notes reader. The user wants to resume work and
+needs the most recent checkpoint to remember where they were.
 
-See `book/_design/2026-05-14-pod-ux-design.md` for the full design spec.
+**Hard gate:** This skill reads checkpoints and presents the summary.
+It does NOT modify any files.
 
-When invoked, tell the user:
+**Voice rules apply** (`~/Code/pod/ETHOS.md` §2): concrete, short,
+no AI hedge-speak. Quote the checkpoint verbatim; do not paraphrase.
 
-> pod-resume-state is part of the MVP plan but not yet implemented.
-> The design spec is in book/_design/2026-05-14-pod-ux-design.md.
+**AskUserQuestion is mandatory for every user input** (ETHOS §3). No
+plain chat prompts. If AUQ is unavailable, stop and report
+`BLOCKED — AskUserQuestion unavailable`.
+
+---
+
+## Step 0: Parse the command
+
+Detect the form the user invoked:
+
+- `/pod-resume-state` → **newest across all theses** (default)
+- `/pod-resume-state <slug>` → **newest in that thesis**
+- `/pod-resume-state list` → **top 20 across all theses, table view**
+- `/pod-resume-state list <slug>` → **top 20 in that thesis, table view**
+
+If the user invokes plain `/pod-resume-state` with no arg, do NOT ask
+which thesis. The whole point is cross-thesis "where was I" without
+remembering. The arg is the override, not the default.
+
+---
+
+## Step 1: Find candidates
+
+```bash
+eval "$(~/Code/pod/bin/pod-paths)"
+
+if [ -n "$SLUG_FILTER" ]; then
+  # Scope to one thesis
+  SEARCH_DIR="$POD_THESES/$SLUG_FILTER/checkpoints"
+  if [ ! -d "$SEARCH_DIR" ]; then
+    echo "NO_CHECKPOINTS for thesis $SLUG_FILTER"
+    exit 0
+  fi
+  FILES=$(find "$SEARCH_DIR" -maxdepth 1 -name "*.md" -type f 2>/dev/null | sort -r | head -20)
+else
+  # All theses
+  FILES=$(find "$POD_THESES"/*/checkpoints -maxdepth 1 -name "*.md" -type f 2>/dev/null | sort -r | head -20)
+fi
+
+if [ -z "$FILES" ]; then
+  echo "NO_CHECKPOINTS"
+else
+  echo "$FILES"
+fi
+```
+
+Sort logic: filename `YYYYMMDD-HHMMSS-<title>.md` IS the canonical
+order. `sort -r` gives newest first. Stable across rsync/copy.
+
+If output is `NO_CHECKPOINTS`, tell the user:
+
+> No checkpoints saved yet. Run `/pod-save-state` mid-session to capture state, then `/pod-resume-state` will find it.
 
 Then stop.
+
+---
+
+## Step 2: Pick the target file
+
+**Default mode** (`/pod-resume-state` with no `list` keyword): pick the
+first file from the sorted output — that's the newest checkpoint.
+
+**List mode** (`list` keyword in args): present a table.
+
+For each file in the candidate list, read its frontmatter quickly:
+
+```bash
+for f in $FILES; do
+  awk '/^---$/{c++; next} c==1{print}' "$f" | head -5
+  echo "FILE: $f"
+  echo "---"
+done
+```
+
+Build a table. Display via AskUserQuestion so the user can pick:
+
+```
+D1 — Pick a checkpoint to load
+ELI10: top 20 most recent checkpoints across <all theses | thesis <slug>>.
+       Picking one shows you its summary. None selected = stop.
+Options:
+A) <thesis-1>: <title-1>  (<date>)   ← newest
+B) <thesis-1>: <title-2>  (<date>)
+C) <thesis-2>: <title-3>  (<date>)
+...
+U) Cancel — don't load anything
+```
+
+If list has fewer than 20 entries, only show what exists. Cap option
+keys at the alphabet (A-T = 20). Recommendation is always A (newest).
+
+If user picks U, stop. Otherwise capture the chosen `FILE`.
+
+**Default mode** skips the list AUQ and goes straight to Step 3 with
+the newest file.
+
+---
+
+## Step 3: Read and present
+
+Read the chosen file. Parse:
+
+- `thesis:` from frontmatter
+- `timestamp:` from frontmatter
+- `title:` from frontmatter (or empty)
+- The four body sections: Working on, Decisions Made, Remaining Work, Open Questions / Notes
+
+Present this exact shape (concrete, no padding):
+
+```
+RESUMING
+
+Thesis:    <slug>
+Saved:     <timestamp, in your local timezone if possible>
+File:      <path>
+
+## Working on
+<verbatim body of Working on section>
+
+## Decisions Made
+<verbatim bullets>
+
+## Remaining Work
+<verbatim numbered list>
+
+## Open Questions / Notes
+<verbatim bullets>
+```
+
+Quote the checkpoint verbatim. Do not rephrase. Do not summarize.
+The user wrote this so future-them could read it; you are future-them.
+
+If the current cwd is a different workspace than where the checkpoint
+was saved, add a one-line warning at the top:
+
+> Note: this checkpoint was saved from a different workspace. Paths
+> in `files_touched` may not exist here.
+
+---
+
+## Step 4: AskUserQuestion — next move
+
+After presenting, ask via AUQ:
+
+```
+D2 — What now?
+ELI10: you've seen where you left off. Pick the next move.
+Options:
+A) Continue on the first Remaining Work item (recommended if list is non-empty)
+B) Pick a different Remaining Work item to start with
+C) Show the full saved file (Read tool, in case you want more context)
+D) Just needed the context, thanks (stop here)
+```
+
+If A, name the first Remaining Work item back to the user and stop.
+If B, AskUserQuestion again with the Remaining Work items as options.
+If C, the file is already in your working memory from Step 3 — show
+the full content (frontmatter + all sections).
+If D, stop with a brief acknowledgment.
+
+---
+
+## Step 5: Append to timeline
+
+```bash
+~/Code/pod/bin/pod-timeline-log "$(jq -n \
+  --arg thesis "$THESIS_FROM_CHECKPOINT" \
+  --arg file "$FILE" \
+  '{skill:"pod-resume-state", thesis:$thesis, event:"completed", file:$file}')"
+```
+
+`THESIS_FROM_CHECKPOINT` is the `thesis:` field from the frontmatter
+of the loaded file, not anything the user typed.
+
+---
+
+## List-mode-only flow
+
+If the user invoked `/pod-resume-state list` and selected "Cancel" in
+Step 2, also append to timeline (event = "listed") so the user's "what
+have I been doing" question is greppable later. Skip Steps 3-4.
+
+---
+
+## Hard rules
+
+- **Never ask for user input via plain chat.** Always `AskUserQuestion`.
+  If AUQ is unavailable, BLOCKED.
+- **Never modify any file.** This skill reads checkpoints and writes
+  one timeline event. That is the whole job.
+- **Never paraphrase the checkpoint.** Quote verbatim. The user wrote
+  it for themselves to read.
+- **Cross-thesis default is intentional.** With no `<slug>` argument,
+  resume reads across all theses. Don't try to "be helpful" by asking
+  which thesis when the user gave no slug.
+- **Default mode is newest, not picker.** With no `list` keyword, just
+  load the newest checkpoint. The user is asking "where was I", not
+  "give me a menu."

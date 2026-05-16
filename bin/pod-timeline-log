@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# pod-timeline-log — append a JSON event to book/_events/timeline.jsonl
+#
+# Usage:
+#   pod-timeline-log '{"skill":"pod-thesis-hours","thesis":"apld","event":"completed"}'
+#
+# Required fields: skill, event. Optional: thesis, outcome, duration_s, file.
+# Auto-injects ts if missing (UTC ISO 8601).
+# Silently no-op if jq is not installed.
+#
+# Adapted from gstack-timeline-log (MIT, gstack project), simplified:
+# - Writes locally to book/_events/, not global ~/.gstack/
+# - Uses jq instead of bun (universal, no Node/Bun dependency)
+set -euo pipefail
+
+INPUT="${1:-}"
+[ -n "$INPUT" ] || { echo "ERROR: no JSON input" >&2; exit 1; }
+
+eval "$("$(dirname "$0")/pod-paths")"
+mkdir -p "$POD_EVENTS"
+
+if ! command -v jq >/dev/null 2>&1; then
+  echo "WARN: jq not installed, skipping timeline log (install: brew install jq)" >&2
+  exit 0
+fi
+
+VALIDATED=$(printf '%s' "$INPUT" | jq -c '
+  if .skill == null or .event == null then
+    error("missing required fields: skill, event")
+  else . end
+  | .ts = (.ts // (now | todateiso8601))
+' 2>/dev/null) || {
+  echo "WARN: invalid input for timeline-log, skipping" >&2
+  exit 0
+}
+
+echo "$VALIDATED" >> "$POD_EVENTS/timeline.jsonl"

@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# pod-eureka-log — append an insight to book/_events/eureka.jsonl
+#
+# Usage:
+#   pod-eureka-log '{"skill":"...","thesis":"...","consensus_view":"...","your_view":"...","evidence":"..."}'
+#
+# Required: skill, thesis, consensus_view, your_view.
+# Optional: evidence (free-form supporting note).
+#
+# Eureka log = cross-thesis insight file. The crown jewels. One JSON line
+# per insight pod has helped you name. pod does NOT decide what qualifies;
+# only writes when the user accepts an explicit log offer.
+set -euo pipefail
+
+INPUT="${1:-}"
+[ -n "$INPUT" ] || { echo "ERROR: no JSON input" >&2; exit 1; }
+
+eval "$("$(dirname "$0")/pod-paths")"
+mkdir -p "$POD_EVENTS"
+
+command -v jq >/dev/null 2>&1 || {
+  echo "WARN: jq not installed, skipping eureka log" >&2
+  exit 0
+}
+
+VALIDATED=$(printf '%s' "$INPUT" | jq -c '
+  if .skill == null or .thesis == null or .consensus_view == null or .your_view == null then
+    error("missing required fields: skill, thesis, consensus_view, your_view")
+  else . end
+  | .ts = (.ts // (now | todateiso8601))
+' 2>/dev/null) || {
+  echo "WARN: invalid input for eureka-log, skipping" >&2
+  exit 0
+}
+
+echo "$VALIDATED" >> "$POD_EVENTS/eureka.jsonl"

@@ -154,6 +154,18 @@ pod is the skill pack. Your `book/` (theses, positions, P&L) is your
 private content and stays in your private workspace repo. Nothing in
 this open-source repo touches your data.
 
+## Credits
+
+Helper utilities in `bin/` (`pod-paths`, `pod-thesis-list`, `pod-timeline-log`,
+`pod-learnings-log`, `pod-eureka-log`) are adapted from
+[gstack](https://github.com/garrytan/gstack) (MIT) and simplified for
+pod's project-local layout. Architectural patterns — context recovery
+preamble, AskUserQuestion as decision brief, append-only filename
+ordering, eureka log, completion status — are also inspired by gstack.
+
+pod is not a fork. It is an investment-domain rebuild that aggressively
+borrows proven engineering patterns from gstack's coding-domain work.
+
 ## License
 
 MIT. Free forever. Go find some edge.

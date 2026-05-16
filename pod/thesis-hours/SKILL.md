@@ -41,18 +41,16 @@ dashes.
 
 ## Step 0: Resolve the thesis slug
 
-Find existing theses, sorted by most-recently-touched:
+Use the `pod-thesis-list` helper to find existing theses, mtime-sorted:
 
 ```bash
-THESES_DIR="book/theses"
-mkdir -p "$THESES_DIR"
-EXISTING=$(find "$THESES_DIR" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | while read d; do
-  newest=$(find "$d" -type f \( -name "*.md" -o -name "*.jsonl" \) -exec stat -f "%m %N" {} \; 2>/dev/null | sort -rn | head -1 | awk '{print $1}')
-  echo "${newest:-0} $(basename "$d")"
-done | sort -rn | head -6 | awk '{print $2}')
-echo "EXISTING_THESES:"
-echo "$EXISTING"
+eval "$(~/Code/pod/bin/pod-paths)"
+mkdir -p "$POD_THESES"
+~/Code/pod/bin/pod-thesis-list | head -6
 ```
+
+Output is one line per existing thesis: `<slug>  <YYYY-MM-DD>`. Empty
+output means no theses yet — the user is starting fresh.
 
 Then AskUserQuestion (use the brief format from ETHOS):
 
@@ -106,7 +104,8 @@ Set `THESIS_SLUG=$SLUG` for the rest of the skill.
 If the thesis folder exists, scan it:
 
 ```bash
-DIR="book/theses/$THESIS_SLUG"
+eval "$(~/Code/pod/bin/pod-paths)"
+DIR="$POD_THESES/$THESIS_SLUG"
 if [ -d "$DIR" ]; then
   echo "--- RECENT ARTIFACTS ---"
   echo "THESIS: $THESIS_SLUG"
@@ -114,8 +113,8 @@ if [ -d "$DIR" ]; then
   LATEST_CHECKPOINT=$(find "$DIR/checkpoints" -name "*.md" -type f 2>/dev/null | sort -r | head -1)
   [ -n "$LATEST_DOC" ] && echo "LATEST_DOC: $LATEST_DOC"
   [ -n "$LATEST_CHECKPOINT" ] && echo "LATEST_CHECKPOINT: $LATEST_CHECKPOINT"
-  if [ -f "book/_events/timeline.jsonl" ]; then
-    grep "\"thesis\":\"$THESIS_SLUG\"" book/_events/timeline.jsonl 2>/dev/null | tail -3
+  if [ -f "$POD_EVENTS/timeline.jsonl" ]; then
+    grep "\"thesis\":\"$THESIS_SLUG\"" "$POD_EVENTS/timeline.jsonl" 2>/dev/null | tail -3
   fi
   echo "--- END ARTIFACTS ---"
 else
@@ -220,8 +219,9 @@ fall back to plain prompts.
 ## Step 4: Write the thesis doc
 
 ```bash
+eval "$(~/Code/pod/bin/pod-paths)"
 DATE=$(date +%Y-%m-%d)
-DIR="book/theses/$THESIS_SLUG"
+DIR="$POD_THESES/$THESIS_SLUG"
 mkdir -p "$DIR"
 
 # Decide filename: thesis if new, update if existing thesis was refreshed
@@ -317,15 +317,16 @@ anything else.
 ## Step 6: Append to the timeline
 
 ```bash
-mkdir -p book/_events
-TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-jq -n --arg ts "$TS" --arg thesis "$THESIS_SLUG" --arg kind "$KIND" --arg file "$FILE" \
-  '{ts:$ts, skill:"pod-thesis-hours", thesis:$thesis, event:"completed", kind:$kind, file:$file}' \
-  >> book/_events/timeline.jsonl
+~/Code/pod/bin/pod-timeline-log "$(jq -n \
+  --arg thesis "$THESIS_SLUG" \
+  --arg kind "$KIND" \
+  --arg file "$FILE" \
+  '{skill:"pod-thesis-hours", thesis:$thesis, event:"completed", kind:$kind, file:$file}')"
 ```
 
-Skip this step silently if `jq` is not installed. (Add a note in the
-final output for the user: "tip: install jq for timeline logging.")
+The `pod-timeline-log` helper handles ts injection, validation, and
+silent no-op if jq is unavailable. If jq is missing, mention it in the
+final output: "tip: `brew install jq` to enable timeline logging."
 
 ---
 
@@ -356,15 +357,15 @@ A) Yes, log this insight
 B) No, just keep it in the thesis doc
 ```
 
-If yes, append:
+If yes, append via the helper:
 
 ```bash
-jq -n --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-      --arg thesis "$THESIS_SLUG" \
-      --arg insight "<one-sentence summary>" \
-      --arg context "<2-3 sentence context>" \
-  '{ts:$ts, skill:"pod-thesis-hours", thesis:$thesis, insight:$insight, context:$context}' \
-  >> book/_events/eureka.jsonl
+~/Code/pod/bin/pod-eureka-log "$(jq -n \
+  --arg thesis "$THESIS_SLUG" \
+  --arg consensus_view "<the consensus framing, in user's words>" \
+  --arg your_view "<the user's contrarian framing>" \
+  --arg evidence "<optional supporting evidence>" \
+  '{skill:"pod-thesis-hours", thesis:$thesis, consensus_view:$consensus_view, your_view:$your_view, evidence:$evidence}')"
 ```
 
 ---
