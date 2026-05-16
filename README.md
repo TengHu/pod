@@ -49,22 +49,42 @@ cheap. You stop skipping diligence because it was "too much work."
 pod installs **project-local**. No global skill pollution. Skills only
 fire when you are in your fund workspace.
 
-```bash
-# Clone pod once, anywhere
-git clone https://github.com/TengHu/pod.git ~/Code/pod
+Step 1 — clone pod once:
 
-# From your fund workspace repo (private)
-cd ~/Code/my-fund && ~/Code/pod/setup
+```bash
+git clone https://github.com/TengHu/pod.git ~/Code/pod
 ```
 
-The setup script symlinks each skill into `.claude/skills/pod-*` of the
-current repo. To update pod:
+Step 2 — open Claude Code from your fund workspace and tell it:
+
+> Install pod by following `~/Code/pod/setup.md`.
+
+Claude reads the procedure, asks any clarifying questions, and creates
+project-local symlinks at `.claude/skills/pod-*`. Idempotent. Re-run
+the same line any time (after `git pull` in the pod repo, or after pod
+adds new skills) to refresh.
+
+Why a markdown procedure instead of a bash script: the AI handles edge
+cases (existing install, missing dependencies, custom paths) by asking
+you, instead of dying with a stack trace.
+
+To update pod source:
 
 ```bash
 cd ~/Code/pod && git pull
 ```
 
-Symlinks pick up changes immediately. No re-install.
+Symlinks pick up changes immediately. No re-install needed unless pod
+added new skills (then re-run the install line above).
+
+## Uninstall
+
+From your workspace, tell Claude Code:
+
+> Uninstall pod by following `~/Code/pod/uninstall.md`.
+
+Removes only `.claude/skills/pod-*` from this workspace. Source repo
+and `book/` content stay untouched.
 
 ## How it works
 
@@ -127,13 +147,6 @@ What pod's `ETHOS.md` *does* define is how the tool behaves:
 6. **Eureka log.** A cross-thesis insight file the user owns. pod
    writes; the user decides what counts as an insight.
 
-## Uninstall
-
-```bash
-rm -rf .claude/skills/pod-*
-```
-
-The pod source repo at `~/Code/pod` stays. Your `book/` is untouched.
 
 ## Privacy
 
