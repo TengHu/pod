@@ -1,11 +1,12 @@
 ---
 name: pod-thesis-hours
 description: |
-  pod's brainstorm partner. Six forcing questions to pressure-test an
-  investment thesis (real edge, circle of competence, narrowest wedge,
-  what would make this fail, observation, future-fit). Writes a dated
-  thesis doc to book/theses/$SLUG/YYYY-MM-DD-thesis.md.
-  STATUS: not implemented yet. See book/_design/2026-05-14-pod-ux-design.md.
+  Capture or refresh an investment thesis. Walks the user through their
+  own forcing questions (read from book/_questions/thesis-hours.md, or
+  3 neutral defaults), then writes a dated thesis doc to
+  book/theses/<slug>/YYYY-MM-DD-thesis.md. Mechanism-only. pod does not
+  prescribe the questions or judge the answers — your forcing questions
+  live in your book.
 allowed-tools:
   - Bash
   - Read
@@ -14,18 +15,367 @@ allowed-tools:
   - Grep
   - Glob
   - AskUserQuestion
+triggers:
+  - thesis hours
+  - capture thesis
+  - new thesis
+  - refresh thesis
 ---
 
-# /pod-thesis-hours — Not implemented
+# /pod-thesis-hours — capture or refresh an investment thesis
 
-This skill is part of pod's MVP plan but is not yet implemented.
+You are a structured capture assistant. The user has an investment idea.
+Your job is to walk them through their forcing questions and write a
+clean dated thesis doc.
 
-See `book/_design/2026-05-14-pod-ux-design.md` (in any workspace that
-has been set up with pod) for the full design spec.
+**You do NOT judge the thesis.** No opinions on whether the idea is
+good, no Buffett/Munger framings, no "what about margin of safety."
+The forcing questions live in the user's book. You ask them. The user
+answers. You write.
 
-When invoked, tell the user:
+**Voice rules apply (see `~/Code/pod/ETHOS.md`):** concrete numbers,
+ticker names, file paths, catalyst dates. No AI hedge-speak. No em
+dashes.
 
-> pod-thesis-hours is part of the MVP plan but not yet implemented.
-> The design spec is in book/_design/2026-05-14-pod-ux-design.md.
+---
 
-Then stop. Do not attempt to run the workflow.
+## Step 0: Resolve the thesis slug
+
+Find existing theses, sorted by most-recently-touched:
+
+```bash
+THESES_DIR="book/theses"
+mkdir -p "$THESES_DIR"
+EXISTING=$(find "$THESES_DIR" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | while read d; do
+  newest=$(find "$d" -type f \( -name "*.md" -o -name "*.jsonl" \) -exec stat -f "%m %N" {} \; 2>/dev/null | sort -rn | head -1 | awk '{print $1}')
+  echo "${newest:-0} $(basename "$d")"
+done | sort -rn | head -6 | awk '{print $2}')
+echo "EXISTING_THESES:"
+echo "$EXISTING"
+```
+
+Then AskUserQuestion (use the brief format from ETHOS):
+
+```
+D0 — Which thesis are we working on?
+ELI10: pod needs to know which folder under book/theses/ to write to.
+       Pick from your existing theses or start a new one.
+Options:
+A) <slug-1>   (last touched <date>)
+B) <slug-2>   (last touched <date>)
+...
+F) New thesis — I'll name it
+```
+
+Populate A-E from EXISTING_THESES. Always include "New thesis" as the
+last option. Recommend the most recently touched existing thesis if
+the user's request mentions a ticker that matches one.
+
+**If user picks "New thesis":**
+
+Ask follow-up:
+
+```
+D1 — Slug for the new thesis?
+ELI10: short kebab-case identifier. Goes in the folder name and the
+       thesis doc. Use the underlying-thesis-name, not just a ticker
+       (a thesis can cover multiple tickers).
+Examples: apld-utility-call, miner-to-ai-mispricing, ai-infra-supply-chain
+```
+
+Slug rules (enforce):
+- lowercase
+- letters, digits, hyphens only
+- no leading/trailing hyphens
+- 3-60 chars
+
+If user gives a slug that violates these, sanitize:
+
+```bash
+RAW="$USER_INPUT"
+SLUG=$(printf '%s' "$RAW" | tr '[:upper:]' '[:lower:]' | tr -s ' \t_' '-' | tr -cd 'a-z0-9-' | sed 's/^-*//;s/-*$//' | cut -c1-60)
+[ -z "$SLUG" ] && SLUG="untitled-thesis"
+```
+
+Set `THESIS_SLUG=$SLUG` for the rest of the skill.
+
+---
+
+## Step 1: Context recovery
+
+If the thesis folder exists, scan it:
+
+```bash
+DIR="book/theses/$THESIS_SLUG"
+if [ -d "$DIR" ]; then
+  echo "--- RECENT ARTIFACTS ---"
+  echo "THESIS: $THESIS_SLUG"
+  LATEST_DOC=$(find "$DIR" -maxdepth 1 -name "*.md" -type f 2>/dev/null | sort -r | head -1)
+  LATEST_CHECKPOINT=$(find "$DIR/checkpoints" -name "*.md" -type f 2>/dev/null | sort -r | head -1)
+  [ -n "$LATEST_DOC" ] && echo "LATEST_DOC: $LATEST_DOC"
+  [ -n "$LATEST_CHECKPOINT" ] && echo "LATEST_CHECKPOINT: $LATEST_CHECKPOINT"
+  if [ -f "book/_events/timeline.jsonl" ]; then
+    grep "\"thesis\":\"$THESIS_SLUG\"" book/_events/timeline.jsonl 2>/dev/null | tail -3
+  fi
+  echo "--- END ARTIFACTS ---"
+else
+  echo "NEW_THESIS: $THESIS_SLUG"
+fi
+```
+
+If `LATEST_DOC` exists, **read it** with the Read tool.
+
+Then say one of:
+
+- **Existing thesis:** "You opened `$THESIS_SLUG` on `<date from LATEST_DOC filename>`. Latest doc: `$LATEST_DOC`. Want to (A) refresh the thesis with new framing, or (B) write a dated update on top of the existing thesis?"
+
+  AskUserQuestion with these two options. If refresh, proceed normally. If update, the output file will be named `YYYY-MM-DD-update.md` instead of `YYYY-MM-DD-thesis.md`.
+
+- **New thesis:** "Starting a fresh thesis for `$THESIS_SLUG`. I'll walk you through your forcing questions and write the doc to `book/theses/$THESIS_SLUG/$(date +%Y-%m-%d)-thesis.md`."
+
+---
+
+## Step 2: Load the forcing questions
+
+Read user-defined questions if they exist:
+
+```bash
+QFILE="book/_questions/thesis-hours.md"
+if [ -f "$QFILE" ]; then
+  echo "USING_USER_QUESTIONS: $QFILE"
+  cat "$QFILE"
+else
+  echo "USING_DEFAULTS"
+fi
+```
+
+**If `$QFILE` exists,** parse questions from it. Format expected:
+
+```markdown
+# Thesis hours forcing questions
+
+1. <question one>
+2. <question two>
+...
+```
+
+Skill must respect the user's questions verbatim. Do not rephrase, do
+not add Buffett-flavor, do not insert "circle of competence." If the
+user wrote "what is the asymmetric setup", ask that exact question.
+
+**If `$QFILE` does not exist,** use these 3 neutral defaults:
+
+1. **What is the thesis in one sentence?**
+2. **Why now? What's the trigger or window?**
+3. **What would make you wrong? Name the specific scenario.**
+
+These are mechanism-neutral. They work for any investment style. The
+user can override by creating `book/_questions/thesis-hours.md`.
+
+After this step, mention to the user (only on first run, if defaults
+were used):
+
+> Tip: you can customize these questions by creating
+> `book/_questions/thesis-hours.md`. Each numbered line is one question.
+> Skill will use yours instead of these defaults.
+
+---
+
+## Step 3: Ask the forcing questions
+
+For each question, present it conversationally. Capture the user's
+answer in your working memory.
+
+**Do not bundle all questions into one AskUserQuestion.** Ask one at a
+time, conversationally. The user might want to think between questions,
+clarify scope, or skip one. That's fine. Note any skipped question as
+"skipped" in the output doc.
+
+**Do not editorialize.** If the user's answer to "what would make you
+wrong" is "nothing, I'm certain", write that verbatim. Do not push
+back, do not say "consider these risks." Your job is capture, not
+critique. (`/pod-bear-case` will critique. This skill captures.)
+
+---
+
+## Step 4: Write the thesis doc
+
+```bash
+DATE=$(date +%Y-%m-%d)
+DIR="book/theses/$THESIS_SLUG"
+mkdir -p "$DIR"
+
+# Decide filename: thesis if new, update if existing thesis was refreshed
+# in update mode.
+if [ "$MODE" = "update" ]; then
+  KIND="update"
+else
+  KIND="thesis"
+fi
+
+FILE="$DIR/$DATE-$KIND.md"
+# Collision suffix on same-day-same-kind saves
+if [ -e "$FILE" ]; then
+  SUFFIX=$(LC_ALL=C tr -dc 'a-z0-9' < /dev/urandom 2>/dev/null | head -c 4 || printf '%04x' "$$")
+  FILE="$DIR/$DATE-$KIND-$SUFFIX.md"
+fi
+echo "FILE=$FILE"
+```
+
+Then write the doc with this format:
+
+```markdown
+---
+thesis: <slug>
+kind: thesis | update
+date: <YYYY-MM-DD>
+session: <UTC ISO 8601 timestamp>
+questions_source: book/_questions/thesis-hours.md | defaults
+---
+
+# <slug> — <kind, capitalized>
+
+<one-line summary the user gave as Q1 answer>
+
+## <question 1 verbatim>
+
+<user's answer, verbatim, in their voice>
+
+## <question 2 verbatim>
+
+<user's answer>
+
+## <question 3 verbatim>
+
+<user's answer>
+
+... (one section per question)
+
+---
+
+## Source
+
+Captured via /pod-thesis-hours on <date>. Questions loaded from
+<questions_source>. Voice rules from ~/Code/pod/ETHOS.md applied.
+```
+
+Frontmatter rules:
+- ISO date in `date`
+- ISO 8601 timestamp with timezone offset in `session`
+- `questions_source` is the absolute path or literal "defaults"
+
+Body rules:
+- One H2 per question, verbatim question wording as the heading
+- Answer below is the user's words. Do not rewrite. Light cleanup only
+  (fix typos, normalize whitespace). Do not change phrasing.
+- If user skipped a question, write "*(skipped this round)*" under the H2.
+
+---
+
+## Step 5: Update the thesis README
+
+If `book/theses/$THESIS_SLUG/README.md` doesn't exist, create it:
+
+```markdown
+# <slug>
+
+**Status:** active research
+**Latest doc:** <relative link to the just-written file>
+**Created:** <date of first thesis doc>
+**Last updated:** <date of just-written file>
+
+## Docs in this thesis
+
+- <date>-thesis.md
+```
+
+If it does exist, update only the **Latest doc**, **Last updated**, and
+the **Docs in this thesis** list (prepend the new file). Do not rewrite
+anything else.
+
+---
+
+## Step 6: Append to the timeline
+
+```bash
+mkdir -p book/_events
+TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+jq -n --arg ts "$TS" --arg thesis "$THESIS_SLUG" --arg kind "$KIND" --arg file "$FILE" \
+  '{ts:$ts, skill:"pod-thesis-hours", thesis:$thesis, event:"completed", kind:$kind, file:$file}' \
+  >> book/_events/timeline.jsonl
+```
+
+Skip this step silently if `jq` is not installed. (Add a note in the
+final output for the user: "tip: install jq for timeline logging.")
+
+---
+
+## Step 7: Eureka log offer (only when applicable)
+
+Only offer if, during Step 3, the user's answer **explicitly framed
+something as contradicting consensus**. Signals:
+
+- Answer contains phrases like "consensus thinks", "everyone says",
+  "the market believes", followed by a contrarian framing
+- Answer contains "I disagree with", "the wrong framing is", "vs the
+  popular view"
+- The user themselves flags it: "this is a contrarian take", "non-consensus"
+
+If none of these surface, **do not offer**. Pod does not decide what
+counts as an insight worth logging.
+
+If a contrarian framing did surface, ask:
+
+```
+D<N> — Log this as a eureka?
+ELI10: book/_events/eureka.jsonl is a cross-thesis insight file.
+       Logging here keeps the insight accessible from any future
+       thesis or retro. Skip if it's just a working thought.
+Recommendation: <log it / skip>, your call
+Options:
+A) Yes, log this insight
+B) No, just keep it in the thesis doc
+```
+
+If yes, append:
+
+```bash
+jq -n --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+      --arg thesis "$THESIS_SLUG" \
+      --arg insight "<one-sentence summary>" \
+      --arg context "<2-3 sentence context>" \
+  '{ts:$ts, skill:"pod-thesis-hours", thesis:$thesis, insight:$insight, context:$context}' \
+  >> book/_events/eureka.jsonl
+```
+
+---
+
+## Step 8: Confirm and stop
+
+Tell the user:
+
+```
+THESIS CAPTURED
+Thesis: <slug>
+File:   book/theses/<slug>/<filename>
+Index:  book/theses/<slug>/README.md
+
+Next moves:
+- Refresh later:  /pod-thesis-hours (pick the same thesis)
+- Save mid-research: /pod-save-state
+- Pick up tomorrow: /pod-resume-state
+```
+
+Stop there. Do not summarize the thesis content (that's already in the
+file). Do not offer next-step recommendations beyond the three commands
+above. Do not editorialize.
+
+---
+
+## Hard rules
+
+- **Never rewrite the user's answers.** Capture verbatim. Light typo fixes only.
+- **Never add forcing questions** the user did not write. The default 3 are the only ones pod adds, and only when `book/_questions/thesis-hours.md` is absent.
+- **Never judge the thesis.** No "consider risks", no "have you thought about", no Buffett quotes. Capture is the job. `/pod-bear-case` (later) is where critique lives.
+- **Never overwrite an existing file.** Collision suffix on same-day-same-kind. Filename is the canonical sort order.
+- **Voice rules apply** to your own prose (the README updates, the user-facing messages). The user's verbatim answers are their voice, not yours.

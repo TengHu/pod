@@ -106,15 +106,26 @@ Three principles make this work:
 
 ## Design philosophy
 
-Three principles in `ETHOS.md`, injected into every skill:
+pod ships **mechanisms, not opinions**. The framework is opinion-neutral
+about how to invest. Your investment philosophy lives in your own
+`book/ETHOS.md` (Buffett value, Druckenmiller macro, Soros reflexivity,
+pure quant — pod doesn't care, it just runs your process).
 
-1. **Complete diligence is cheap.** AI makes the marginal cost of
-   completeness near zero. Run the bear case every time. The 30 minutes
-   cost seconds with pod.
-2. **Truth before consensus.** Look for the gap between narrative and
-   fundamentals. Log it. Build conviction off it.
-3. **User sovereignty.** Models recommend. You decide. Especially when
+What pod's `ETHOS.md` *does* define is how the tool behaves:
+
+1. **User sovereignty.** Models recommend. You decide. Especially when
    two models agree, that is signal, not mandate.
+2. **Voice rules.** Concrete numbers, real ticker names, real catalyst
+   dates. No AI hedge-speak. No em dashes.
+3. **AskUserQuestion as decision brief.** Every question is structured
+   (ELI10, stakes, recommendation, pros/cons, Net line). No vague
+   prompts, no vague answers.
+4. **Confusion Protocol.** For irreversible-feeling decisions, the skill
+   stops, names the ambiguity, and asks.
+5. **Append-only history.** Filename-as-canonical-order. No overwrites.
+   Diffable in git.
+6. **Eureka log.** A cross-thesis insight file the user owns. pod
+   writes; the user decides what counts as an insight.
 
 ## Uninstall
 
