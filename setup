@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# pod/setup — install pod skills into a project's .claude/skills/ directory.
+#
+# Usage:
+#   cd <your-workspace> && ~/Code/pod/setup
+#   ~/Code/pod/setup <target-dir>
+#
+# Creates symlinks at <target>/.claude/skills/pod-<skill-name>/SKILL.md
+# pointing at the canonical SKILL.md in this repo. To update pod, run
+# `git pull` in this repo. Symlinks pick up changes immediately.
+
+set -euo pipefail
+
+POD_SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TARGET_DIR="${1:-$PWD}"
+
+if [ ! -d "$TARGET_DIR" ]; then
+  echo "Error: target directory does not exist: $TARGET_DIR" >&2
+  exit 1
+fi
+
+if [ ! -d "$POD_SRC/pod" ]; then
+  echo "Error: pod source not found at $POD_SRC/pod" >&2
+  exit 1
+fi
+
+SKILLS_DIR="$TARGET_DIR/.claude/skills"
+mkdir -p "$SKILLS_DIR"
+
+echo "Installing pod skills into $SKILLS_DIR"
+echo ""
+
+installed=0
+for skill_dir in "$POD_SRC"/pod/*/; do
+  skill_name="$(basename "$skill_dir")"
+  if [ ! -f "$skill_dir/SKILL.md" ]; then
+    echo "  skip pod-$skill_name (no SKILL.md)"
+    continue
+  fi
+  install_dir="$SKILLS_DIR/pod-$skill_name"
+  mkdir -p "$install_dir"
+  ln -sf "$skill_dir/SKILL.md" "$install_dir/SKILL.md"
+  echo "  ok   pod-$skill_name -> $skill_dir"
+  installed=$((installed + 1))
+done
+
+echo ""
+echo "Installed $installed skills."
+echo ""
+echo "Available in this project as:"
+for skill_dir in "$POD_SRC"/pod/*/; do
+  skill_name="$(basename "$skill_dir")"
+  [ -f "$skill_dir/SKILL.md" ] && echo "  /pod-$skill_name"
+done
+echo ""
+echo "Update pod with: cd $POD_SRC && git pull"
+echo "Uninstall with:  rm -rf $SKILLS_DIR/pod-*"
