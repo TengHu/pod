@@ -51,7 +51,7 @@ fire when you are in your fund workspace.
 
 ```bash
 # Clone pod once, anywhere
-git clone https://github.com/<your-user>/pod.git ~/Code/pod
+git clone https://github.com/TengHu/pod.git ~/Code/pod
 
 # From your fund workspace repo (private)
 cd ~/Code/my-fund && ~/Code/pod/setup
