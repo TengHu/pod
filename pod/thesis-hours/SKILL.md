@@ -120,6 +120,39 @@ context line (`Thesis: <slug> | Last touched: <date> | Session N of M`),
 and status messages prefix with the thesis slug. Carry this through to
 the end of the skill.
 
+Then read cross-skill context — recent timeline events for this thesis,
+plus any relevant learnings:
+
+```bash
+# Recent activity for this thesis (last 5 events from cross-skill timeline)
+echo "=== RECENT EVENTS (this thesis) ==="
+if [ -f "$POD_EVENTS/timeline.jsonl" ]; then
+  grep "\"thesis\":\"$THESIS_SLUG\"" "$POD_EVENTS/timeline.jsonl" 2>/dev/null | tail -5 \
+    | jq -r '"\(.ts[0:10])  \(.skill // "?")  \(.event // "?")"' 2>/dev/null \
+    || echo "(none yet)"
+else
+  echo "(none yet)"
+fi
+
+# Relevant learnings (this thesis OR cross-thesis general)
+echo ""
+echo "=== RELEVANT LEARNINGS ==="
+if [ -f "$POD_EVENTS/learnings.jsonl" ]; then
+  jq -r --arg t "$THESIS_SLUG" \
+    'select(.thesis == $t or .thesis == "" or .thesis == null) | "[\(.type)] \(.insight)"' \
+    "$POD_EVENTS/learnings.jsonl" 2>/dev/null | tail -3 \
+    || echo "(none yet)"
+else
+  echo "(none yet)"
+fi
+```
+
+**Use this context in your "welcome back" prose.** If a learning is
+relevant to the current session (e.g., a pitfall pattern, a per-thesis
+convention you should respect), state it explicitly: *"Prior learning
+applies — [insight in one sentence]."* If recent events show a clear
+recent pattern (e.g., you just ran save-state yesterday), reference it.
+
 Then scan the thesis folder for prior artifacts:
 
 ```bash
@@ -419,7 +452,34 @@ Do not announce the log unless it's substantive (don't say "I logged a
 learning" for every routine save). If you do log something, mention it
 in one line: "Logged learning: <insight>."
 
-## Step 9: Confirm and stop
+## Step 9: Recommend next move (contextual handoff, ETHOS cohesion)
+
+Based on what was captured in this thesis, choose ONE most-relevant next
+move and recommend it specifically. Pattern-based nudges:
+
+| If the user mentioned... | Recommend |
+|---|---|
+| A **binary catalyst** with a date (PPA reset, FDA decision, earnings, options expiry) | `/pod-bear-case` (v1, not yet built — meanwhile: pull current Plaid positions via `mcp__plaid__*` to baseline exposure) |
+| A **contrarian view** vs consensus that wasn't yet logged as eureka | Re-offer the eureka log; the contrarian framing is the asset |
+| **Multiple tickers** in the same theme (e.g., "APLD, IREN, RIOT") | Suggest running `/pod-thesis-hours` on each ticker, or creating a theme doc `book/themes/<theme>/` |
+| **Position-sizing uncertainty** | Surface `mcp__plaid__*` (check current cross-account exposure) before sizing |
+| **Skipped most forcing questions** | Suggest `/pod-save-state` to checkpoint as "thesis incomplete", return when more is known |
+| Anything else / default | `/pod-save-state` mid-session, then `/pod-resume-state` next session |
+
+Format the recommendation as one line:
+
+> Recommended next: `<skill>` — <one sentence reason citing what the user said>
+
+Example:
+> Recommended next: `/pod-bear-case` (v1) — you named a binary 2027 PPA
+> catalyst, and binary catalysts deserve adversarial stress-testing before
+> sizing up. Per your prior learning on this pattern.
+
+The recommendation must reference something *specific* from this session.
+Generic "you could run X" lines are noise — skip them in favor of the
+default save-and-resume nudge if nothing specific stands out.
+
+## Step 10: Confirm and stop
 
 Tell the user:
 
@@ -429,15 +489,16 @@ Thesis: <slug>
 File:   book/theses/<slug>/<filename>
 Index:  book/theses/<slug>/README.md
 
-Next moves:
+Recommended next: <from Step 9>
+
+Other moves:
 - Refresh later:  /pod-thesis-hours (pick the same thesis)
 - Save mid-research: /pod-save-state
 - Pick up tomorrow: /pod-resume-state
 ```
 
 Stop there. Do not summarize the thesis content (that's already in the
-file). Do not offer next-step recommendations beyond the three commands
-above. Do not editorialize.
+file). Do not editorialize beyond the Step 9 recommendation.
 
 In re-grounding mode (POD_PARALLEL_SESSIONS >= 3), prefix the report
 header with `[$THESIS_SLUG]` so it's identifiable across windows.

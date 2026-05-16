@@ -80,7 +80,29 @@ POD_PARALLEL_SESSIONS=$(find "$POD_BOOK/_sessions" -mmin -120 -type f 2>/dev/nul
 find "$POD_BOOK/_sessions" -mmin +120 -type f -exec rm {} + 2>/dev/null || true
 echo "POD_PARALLEL_SESSIONS: $POD_PARALLEL_SESSIONS"
 
+# Cohesion: read cross-skill timeline + relevant learnings for this thesis
+echo "=== RECENT EVENTS (this thesis) ==="
+if [ -f "$POD_EVENTS/timeline.jsonl" ]; then
+  grep "\"thesis\":\"$THESIS_SLUG\"" "$POD_EVENTS/timeline.jsonl" 2>/dev/null | tail -5 \
+    | jq -r '"\(.ts[0:10])  \(.skill // "?")  \(.event // "?")"' 2>/dev/null \
+    || echo "(none yet)"
+else
+  echo "(none yet)"
+fi
+
+echo ""
+echo "=== RELEVANT LEARNINGS ==="
+if [ -f "$POD_EVENTS/learnings.jsonl" ]; then
+  jq -r --arg t "$THESIS_SLUG" \
+    'select(.thesis == $t or .thesis == "" or .thesis == null) | "[\(.type)] \(.insight)"' \
+    "$POD_EVENTS/learnings.jsonl" 2>/dev/null | tail -3 \
+    || echo "(none yet)"
+else
+  echo "(none yet)"
+fi
+
 DIR="$POD_THESES/$THESIS_SLUG"
+echo ""
 echo "=== thesis dir contents ==="
 ls -la "$DIR" 2>/dev/null | head -20
 echo "=== latest thesis doc ==="
@@ -274,14 +296,30 @@ Log via:
 
 Most save-state sessions won't trigger this. That's fine.
 
-## Step 7: Confirm and stop
+## Step 7: Recommend next move (contextual handoff, ETHOS cohesion)
+
+Based on the Remaining Work the user just approved, choose ONE most-
+relevant next move:
+
+| If the Remaining Work mentions... | Recommend |
+|---|---|
+| A specific Read/research action (e.g., "pull IREN's 10-Q") | Mention that action specifically as the next session's starting point |
+| A pricing-data check (current price, options chain) | Suggest `mcp__alpaca__*` (Alpaca MCP is the data path) |
+| A position-or-balance check across accounts | Suggest `mcp__plaid__*` (Plaid CLI is the data path) |
+| A bear-case or risk question | `/pod-bear-case` (v1, not yet built) |
+| Empty / nothing concrete left | Just `/pod-resume-state` next session — no specific nudge needed |
+
+Format as one line citing the specific item:
+
+> Resume with: `/pod-resume-state` — first remaining work is "pull IREN's 10-Q for HPC revenue mix"; that's the natural starting point.
+
+## Step 8: Confirm and stop
 
 ```
 CHECKPOINT SAVED
 Thesis:    <slug>
 File:      book/theses/<slug>/checkpoints/<filename>
-Resume:    /pod-resume-state
-           or /pod-resume-state <slug>  (scope to this thesis only)
+Resume:    <recommendation from Step 7>
 ```
 
 In re-grounding mode (POD_PARALLEL_SESSIONS >= 3), prefix the header

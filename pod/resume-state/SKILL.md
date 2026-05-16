@@ -63,6 +63,29 @@ POD_PARALLEL_SESSIONS=$(find "$POD_BOOK/_sessions" -mmin -120 -type f 2>/dev/nul
 find "$POD_BOOK/_sessions" -mmin +120 -type f -exec rm {} + 2>/dev/null || true
 echo "POD_PARALLEL_SESSIONS: $POD_PARALLEL_SESSIONS"
 
+# Cohesion: cross-skill context from timeline + learnings
+# (resume-state reads broadly since the slug isn't always known yet — full file
+# tails, filtered when we know the thesis after Step 2)
+echo "=== RECENT EVENTS (last 8 across all theses) ==="
+if [ -f "$POD_EVENTS/timeline.jsonl" ]; then
+  tail -8 "$POD_EVENTS/timeline.jsonl" 2>/dev/null \
+    | jq -r '"\(.ts[0:10])  \(.thesis // "—")  \(.skill // "?")  \(.event // "?")"' 2>/dev/null \
+    || echo "(none yet)"
+else
+  echo "(none yet)"
+fi
+
+echo ""
+echo "=== RECENT LEARNINGS (last 3) ==="
+if [ -f "$POD_EVENTS/learnings.jsonl" ]; then
+  tail -3 "$POD_EVENTS/learnings.jsonl" 2>/dev/null \
+    | jq -r '"[\(.type)] \(.insight)" + (if .thesis and (.thesis | length) > 0 then "  (thesis: \(.thesis))" else "" end)' 2>/dev/null \
+    || echo "(none yet)"
+else
+  echo "(none yet)"
+fi
+echo ""
+
 if [ -n "$SLUG_FILTER" ]; then
   # Scope to one thesis
   SEARCH_DIR="$POD_THESES/$SLUG_FILTER/checkpoints"
@@ -168,6 +191,13 @@ File:      <path>
 
 Quote the checkpoint verbatim. Do not rephrase. Do not summarize.
 The user wrote this so future-them could read it; you are future-them.
+
+**Use the timeline + learnings context from Step 1.** If recent events
+relate to this checkpoint's thesis (e.g., other skills ran on the same
+thesis in between), mention them: *"Note: since this checkpoint, you
+also ran /pod-thesis-hours on 2026-05-26 — that doc may have newer
+framing."* If a recent learning is relevant (e.g., a pitfall pattern
+that applies to the Remaining Work), state it.
 
 If the current cwd is a different workspace than where the checkpoint
 was saved, add a one-line warning at the top:

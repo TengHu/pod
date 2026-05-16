@@ -167,6 +167,76 @@ ordering, eureka log, completion status — are also inspired by gstack.
 pod is not a fork. It is an investment-domain rebuild that aggressively
 borrows proven engineering patterns from gstack's coding-domain work.
 
+## Roadmap
+
+Pod is intentionally small at MVP. The "cohesive team feel" — what makes
+gstack's skills feel like working with a real team instead of a collection
+of files — is built from many small consistencies. We have some;
+others are roadmapped.
+
+### Done (MVP)
+
+- ✅ Single workspace convention (`book/`)
+- ✅ Context recovery per skill at start (latest doc, latest checkpoint)
+- ✅ Append-only filename-as-canonical-order
+- ✅ Eureka log structure
+- ✅ Same voice rules across all skills (ETHOS §2)
+- ✅ AskUserQuestion-only for user input (ETHOS §3)
+- ✅ Confusion Protocol statement (ETHOS §4)
+- ✅ Parallel-session awareness with re-grounding mode (ETHOS §8)
+- ✅ Agent-targeted error style (ETHOS §9)
+- ✅ Operational self-improvement / learnings.jsonl write path (ETHOS §10)
+- ✅ Skills read timeline + learnings at start (cohesion gap A + C)
+- ✅ Contextual next-skill recommendations at end (cohesion gap B)
+
+### Open: cohesion mechanisms (in priority order)
+
+- [ ] **Shared-preamble templating framework** (cohesion gap D). The
+  preamble blocks (parallel session counter, context recovery, learnings
+  read) are currently duplicated across 3 skills. As pod grows past ~7
+  skills or the preamble grows past ~50 lines, hand-maintaining will
+  drift. The fix is gstack's static-site-generator pattern:
+  `SKILL.md.tmpl` with `{{PLACEHOLDER}}` tokens, `scripts/resolvers/*.ts`
+  that emit markdown, a build step (~80 lines of TypeScript) that
+  resolves placeholders into committed SKILL.md files, and a CI
+  freshness check (`gen-skill-docs --dry-run` + `git diff --exit-code`).
+  Trigger to build: when pod has 7+ skills OR the first shared-block
+  divergence bug appears.
+
+- [ ] **Cross-model overlap framing** (gstack's #9 cohesion mechanism).
+  When a second model reviews the same artifact (e.g., `/pod-codex-thesis`
+  reviewing a `/pod-bear-case` output), explicit overlap analysis is
+  the value. OVERLAP = high-confidence findings. UNIQUE TO CODEX /
+  UNIQUE TO CLAUDE = different blind spots. Trigger to build:
+  when a `/pod-codex-thesis` or equivalent second-opinion skill ships.
+
+- [ ] **Auto-decision principles** (gstack's `/autoplan` pattern).
+  When `/pod-autoplan` ships (combining `/pod-bear-case` +
+  `/pod-cio-review` + `/pod-risk-officer` into one flow), encode 6
+  principles that auto-resolve mechanical questions so only taste
+  decisions hit the user. Trigger to build: when `/pod-autoplan` lands.
+
+- [ ] **External-reviewer triage with history** (gstack's Greptile
+  pattern). When pod consumes signals from third-party reviewers
+  (Codex, Plaid eureka triggers, Alpaca alerts), false positives get
+  saved to `book/_events/dismissed.jsonl`. Future runs auto-skip known
+  FP patterns. Trigger to build: when a skill repeatedly flags
+  something the user explicitly dismissed once.
+
+- [ ] **Proactive routing rules**. Tighten the description fields in
+  every skill's frontmatter so Claude Code auto-routes user intent to
+  the right skill without explicit slash-commands. Pod has this
+  partially via skill descriptions; the gap is documented patterns
+  for cross-skill chaining (when user says X, pod should run skill Y
+  before skill Z). Lives in pod-the-framework, not in user workspaces.
+
+- [ ] **Learnings rotation policy**. `book/_events/learnings.jsonl`
+  grows unbounded. Need a policy (e.g., 10MB rotation, 5 generations,
+  same as gstack's attempts log) and a `/pod-learn-prune` skill to
+  remove stale entries (referenced thesis no longer exists, low-
+  confidence aged out). Trigger to build: when the learnings file
+  hits ~1MB OR users report stale insights surfacing.
+
 ## License
 
 MIT. Free forever. Go find some edge.
