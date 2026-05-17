@@ -100,7 +100,12 @@ All artifacts live in `book/` inside your private workspace repo:
 
 ```
 book/
-├── ETHOS.md                       (your fund philosophy)
+├── ETHOS.md                       (your fund philosophy, distilled)
+├── library/                       (foundational reading + frameworks)
+│   ├── volatility/                (e.g., reflexivity, vol skew as narrative)
+│   ├── cycles/                    (e.g., debt cycles, AI capex cycle)
+│   ├── value-investing/           (e.g., margin of safety, circle of competence)
+│   └── ...                        (add domains as your reading expands)
 ├── _events/
 │   ├── timeline.jsonl             (every skill run, every thesis)
 │   ├── learnings.jsonl            (durable lessons across theses)
@@ -115,6 +120,42 @@ book/
         └── checkpoints/
             └── 20260514-093000-initial-diligence.md
 ```
+
+## How to think about theses (the most important convention)
+
+**One thesis = one INTENT, not one ticker.**
+
+A thesis is a *belief about the world that's testable*. If three tickers
+share one belief ("miner-to-AI pivot is mispriced across the sector"),
+they go in ONE thesis with three positions in `positions.jsonl`. If they
+have separate narratives, they go in three separate theses.
+
+The smell test: if you find yourself writing the same paragraph about the
+same ticker in two thesis docs, merge them.
+
+**The falsification test for entity type:**
+
+- "What would prove me wrong?" answer is bet-specific (e.g., "APLD's PPA
+  reset is canceled") → it's a **thesis**
+- Answer is industry-wide (e.g., "AI infra capex falls 30%") → it's a
+  **library entry** (`book/library/<domain>/`)
+- Single data point with no claim attached → just a position, not worth
+  a doc
+
+**Themes are tags, not folders.** Theses tag themes in frontmatter
+(`themes: [ai-infra, power]`). Cross-cutting queries are computed via
+grep, not stored in a separate folder.
+
+**Position truth comes from Plaid, not from `positions.jsonl`.** The
+`positions.jsonl` in each thesis folder is your *reasoning trail* (why
+you bought what when). The truth about what you currently own comes from
+`mcp__plaid__investments_holdings`. If they disagree, Plaid wins.
+
+See `book/_design/2026-05-16-pod-data-model.md` in any workspace using
+pod for the full data model, including the 7 anti-overlap rules and the
+4-question creation test for new theses.
+
+## Three principles for the book
 
 Three principles make this work:
 
