@@ -495,44 +495,58 @@ infrastructure pieces are roadmapped but not built. Each has an
 explicit trigger condition so the work happens when it's actually
 needed.
 
-### D — Templating + build system (the encoding mechanism)
+### D — Templating + build system ✅ BUILT
 
-**The biggest open item.** Pod currently has no templating layer.
-Shared preamble blocks (parallel-session counter, timeline read,
-learnings read) are hand-copied across the 3 MVP skills. Drift risk
-is linear with skill count.
-
-**What to build:**
+**Built and shipped.** Pod now has a gstack-style templating layer:
 
 ```
 ~/Code/pod/
 ├── pod/<skill>/SKILL.md.tmpl        (hand-edited)
 ├── pod/<skill>/SKILL.md             (generated, committed)
-├── scripts/
-│   ├── gen-skill-docs.ts            (~80 LOC build script)
-│   ├── discover-skills.ts           (~30 LOC, finds .tmpl files)
-│   └── resolvers/
-│       ├── index.ts                 (RESOLVERS registry)
-│       ├── preamble.ts              ({{PREAMBLE}} emitter)
-│       ├── auq-format.ts            ({{AUQ_FORMAT}} emitter)
-│       ├── voice-rules.ts           ({{VOICE_RULES}} reference)
-│       └── completion-status.ts
-└── (CI check: gen-skill-docs --dry-run + git diff --exit-code)
+├── package.json + tsconfig.json     (bun + TypeScript)
+└── scripts/
+    ├── gen-skill-docs.ts            (build pipeline)
+    ├── discover-skills.ts           (finds .tmpl files)
+    └── resolvers/
+        ├── types.ts                 (Resolver type)
+        ├── index.ts                 (RESOLVERS registry)
+        ├── preamble.ts              ({{PREAMBLE}} — parallel-session
+        │                              counter + timeline + learnings reads)
+        ├── voice-rules.ts           ({{VOICE_RULES}} — ETHOS §2)
+        ├── auq-format.ts            ({{AUQ_FORMAT}} — ETHOS §3)
+        └── hard-rules-base.ts       ({{HARD_RULES_BASE}} — universal rules)
 ```
 
-Total: ~200 lines of TypeScript + the .tmpl edits.
+**How to use:**
 
-**Trigger to build:**
+- Edit `pod/<skill>/SKILL.md.tmpl` (with `{{PLACEHOLDERS}}` for shared blocks)
+- Run `bun run gen:skill-docs` to regenerate `SKILL.md`
+- Commit both `.tmpl` and `SKILL.md`
+- CI freshness check: `bun run gen:check` exits non-zero on drift
 
-- Pod hits 7+ skills, OR
-- The first shared-block drift bug appears (a preamble line in skill
-  A that's missing from skill B), OR
-- The shared preamble grows past ~50 lines
+**Currently using:**
 
-**Until then:** hand-copy with ETHOS §-references in each duplicated
-block (e.g., `# Parallel session awareness (ETHOS §8 — keep in sync)`).
-The references label every duplicated block with its canonical source,
-making the eventual refactor mechanical.
+- `{{PREAMBLE}}` is used by all 3 MVP skills (replaces the
+  hand-copied parallel-session + timeline + learnings block)
+
+**Available but not yet used in .tmpl files:**
+
+- `{{VOICE_RULES}}` — inline ETHOS §2 voice rules into a skill
+- `{{AUQ_FORMAT}}` — inline ETHOS §3 AUQ decision-brief format
+- `{{HARD_RULES_BASE}}` — universal hard rules every skill should have
+
+These can be threaded into existing skills as the maintainer wishes.
+The build is incremental — adding a placeholder to a .tmpl and
+regenerating is the workflow.
+
+**Next steps for templating:**
+
+- Thread `{{VOICE_RULES}}` and `{{AUQ_FORMAT}}` into each skill's
+  body in place of the current "(see ETHOS §X)" references, so ETHOS
+  rules are actually in Claude's context when a skill runs
+- Consider parameterized resolvers (e.g., `{{PREAMBLE:cross-thesis}}`)
+  if the variation-per-skill grows beyond what the unset-THESIS_SLUG
+  fallback handles
 
 ### `/pod-autoplan` (meta-orchestrator pattern)
 

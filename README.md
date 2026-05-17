@@ -210,6 +210,39 @@ ordering, eureka log, completion status — are also inspired by gstack.
 pod is not a fork. It is an investment-domain rebuild that aggressively
 borrows proven engineering patterns from gstack's coding-domain work.
 
+## Build pipeline
+
+Skill `SKILL.md` files are generated from `SKILL.md.tmpl` templates by
+a small bun + TypeScript build pipeline. Shared blocks (the preamble
+that handles parallel-session awareness, timeline reads, learnings
+reads) live in a single resolver and get inlined into every generated
+SKILL.md. Single source of truth, no drift.
+
+**Workflow:**
+
+```bash
+cd ~/Code/pod
+bun install              # one-time
+bun run gen:skill-docs   # build (writes SKILL.md from SKILL.md.tmpl)
+bun run gen:check        # CI freshness check (exits non-zero on drift)
+```
+
+Edit a template at `pod/<skill>/SKILL.md.tmpl`, run `bun run
+gen:skill-docs`, commit both files. The `setup` install pattern points
+.claude/skills/ symlinks at the generated SKILL.md, which is what
+Claude Code actually reads.
+
+Available placeholders (resolvers in `scripts/resolvers/`):
+
+- `{{PREAMBLE}}` — shared context-recovery: paths, parallel-session
+  counter, timeline + learnings reads (currently used by all 3 MVP skills)
+- `{{VOICE_RULES}}` — ETHOS §2 voice conventions, banned vocabulary
+- `{{AUQ_FORMAT}}` — ETHOS §3 AskUserQuestion decision-brief spec
+- `{{HARD_RULES_BASE}}` — universal hard rules for every skill
+
+See [docs/architecture.md](docs/architecture.md) §"How shared
+mechanisms are encoded into every skill" for the full design.
+
 ## Roadmap
 
 Pod is intentionally small at MVP. The "cohesive team feel" — what makes
@@ -231,20 +264,12 @@ others are roadmapped.
 - ✅ Operational self-improvement / learnings.jsonl write path (ETHOS §10)
 - ✅ Skills read timeline + learnings at start (cohesion gap A + C)
 - ✅ Contextual next-skill recommendations at end (cohesion gap B)
+- ✅ Shared-preamble templating framework (cohesion gap D). Bun +
+  TypeScript build pipeline. `{{PLACEHOLDERS}}` resolved by `scripts/
+  resolvers/*.ts` at build time. CI freshness check via `bun run
+  gen:check`. See [Build pipeline](#build-pipeline) above.
 
 ### Open: cohesion mechanisms (in priority order)
-
-- [ ] **Shared-preamble templating framework** (cohesion gap D). The
-  preamble blocks (parallel session counter, context recovery, learnings
-  read) are currently duplicated across 3 skills. As pod grows past ~7
-  skills or the preamble grows past ~50 lines, hand-maintaining will
-  drift. The fix is gstack's static-site-generator pattern:
-  `SKILL.md.tmpl` with `{{PLACEHOLDER}}` tokens, `scripts/resolvers/*.ts`
-  that emit markdown, a build step (~80 lines of TypeScript) that
-  resolves placeholders into committed SKILL.md files, and a CI
-  freshness check (`gen-skill-docs --dry-run` + `git diff --exit-code`).
-  Trigger to build: when pod has 7+ skills OR the first shared-block
-  divergence bug appears.
 
 - [ ] **Cross-model overlap framing** (gstack's #9 cohesion mechanism).
   When a second model reviews the same artifact (e.g., `/pod-codex-thesis`
