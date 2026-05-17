@@ -151,9 +151,11 @@ grep, not stored in a separate folder.
 you bought what when). The truth about what you currently own comes from
 `mcp__plaid__investments_holdings`. If they disagree, Plaid wins.
 
-See `book/_design/2026-05-16-pod-data-model.md` in any workspace using
-pod for the full data model, including the 7 anti-overlap rules and the
-4-question creation test for new theses.
+See pod's [docs/](docs/) for the full design:
+
+- [docs/architecture.md](docs/architecture.md) — why pod is built this way (closure property, JSONL as logs, append-only history, cohesion mechanisms)
+- [docs/data-model.md](docs/data-model.md) — three layers, anti-overlap rules, frontmatter conventions
+- [docs/entities.md](docs/entities.md) — complete entity catalog (24 entities across 4 categories) and slug system
 
 ## Three principles for the book
 
