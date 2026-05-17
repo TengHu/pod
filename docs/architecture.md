@@ -308,6 +308,142 @@ the entity model, other skills can't see what it did. The entity
 model is the public contract; everything outside it is private to
 that one skill invocation and forgotten when the session ends.
 
+## How shared mechanisms are encoded into every skill
+
+The previous section explained how a skill becomes aware of prior
+outputs. But how does every skill in pod *have* the preamble that
+reads timeline, learnings, session count, and so on? Where is that
+shared bash block stored?
+
+This is a separate architectural question from runtime cohesion, and
+it has its own answer.
+
+### Two distinct mechanisms
+
+**Distinction matters.** Cross-skill cohesion has two layers, often
+conflated:
+
+| Mechanism | When it fires | What it does | How it's stored |
+|---|---|---|---|
+| **Preamble injection** | Every single skill invocation, automatically | Adds shared context recovery + ETHOS rules at the top of every skill | Static (compile-time): templates expand into committed SKILL.md files |
+| **Meta-orchestrator** (e.g., gstack's `/autoplan`) | Only when user explicitly invokes the orchestrator | Reads OTHER SKILL.md files as data, follows their instructions inline, auto-decides mechanical questions | Runtime: a regular SKILL.md that uses the Read tool to load other skills |
+
+Both contribute to cohesion. The preamble injection is the
+*every-skill* mechanism. The meta-orchestrator is the
+*multi-skill-orchestration* mechanism. They're complementary but
+solve different problems.
+
+### gstack's preamble injection (the encoding mechanism)
+
+Gstack uses **static code generation** at build time:
+
+```
+EDIT TIME (maintainer)
+  ├── office-hours/SKILL.md.tmpl        ← hand-edited, short (~600 lines)
+  ├── plan-ceo-review/SKILL.md.tmpl     ← hand-edited
+  ├── ... other .tmpl files
+  └── scripts/resolvers/preamble.ts     ← TypeScript that emits the ~500-line preamble
+
+           ↓ bun run gen:skill-docs
+           ↓ regex replaces {{PREAMBLE}} → emitted markdown
+           ↓ writes generated SKILL.md (~2100 lines each)
+
+BUILD ARTIFACT (committed to git)
+  ├── office-hours/SKILL.md             ← generated, big
+  ├── plan-ceo-review/SKILL.md          ← generated, big
+  └── ...
+
+           ↓ ./setup symlinks committed SKILL.md to ~/.claude/skills/
+
+CLAUDE CODE RUNTIME
+  └── reads ~/.claude/skills/office-hours/SKILL.md when user invokes /office-hours
+```
+
+**The build happens at maintenance time, never at Claude invocation
+time.** When the user runs `/office-hours`, Claude opens the
+already-expanded SKILL.md — the preamble is baked in. Claude doesn't
+run the build pipeline.
+
+Every gstack SKILL.md.tmpl starts with `{{PREAMBLE}}`. When
+`gen-skill-docs.ts` runs, it expands that placeholder into a
+~500-line bash block at the top of every generated SKILL.md. Every
+skill has identical preamble content, because they share the same
+source (`preamble.ts`).
+
+If Garry edits `preamble.ts` to add one line, all 45 skills' SKILL.md
+files get that line on the next `bun run gen:skill-docs`. Single
+source of truth, mass-applied via build.
+
+### gstack's `/autoplan` is the OTHER mechanism (orchestration)
+
+`/autoplan` is *not* part of the preamble system. It's a regular
+skill the user invokes when they want to run CEO review + design
+review + eng review in sequence with auto-decisions.
+
+`/autoplan/SKILL.md` (roughly) says:
+
+> "Read `~/.claude/skills/plan-ceo-review/SKILL.md` using the Read
+> tool. Follow its instructions from top to bottom, skipping sections
+> marked 'already handled by parent skill'. Auto-decide mechanical
+> questions using these 6 principles..."
+
+It treats other skill files as DATA, not as functions to call.
+Claude reads them inline within the parent invocation. The pattern is
+"meta-orchestrator": one skill that runs other skills by loading and
+executing their instructions.
+
+**`/autoplan` is invoked when the user types it, not every time.**
+
+### Pod's current approach (and the gap)
+
+Right now pod has neither mechanism built:
+
+| | gstack | pod (current) |
+|---|---|---|
+| Shared preamble | One file (`preamble.ts`), expanded into N SKILL.md at build time | Hand-copied across N SKILL.md files; edit-each-time |
+| Drift risk | Zero — single source of truth | Linear with skill count |
+| `/autoplan` equivalent | Built (reads other SKILL.md as data) | Not built (designed for v1) |
+| Build step | `bun run gen:skill-docs` | None — direct edits |
+
+When I added the parallel-session counter to pod's 3 MVP skills, I
+hand-copied the same bash block into three files. This works at 3
+skills. At 4-5 skills it starts to drift. At 7+ skills it becomes a
+maintenance disaster.
+
+**Pod's cohesion today is enforced by maintainer discipline, not by
+the encoding mechanism.** The discipline scales to 3-5 skills; after
+that pod needs a real templating system.
+
+### The shape of pod's future templating system
+
+When it's time to build:
+
+```
+~/Code/pod/
+├── pod/                              ← skill sources (.tmpl format)
+│   ├── thesis-hours/
+│   │   ├── SKILL.md.tmpl             ← hand-edited
+│   │   └── SKILL.md                  ← generated (committed OR gitignored)
+│   └── ...
+├── scripts/
+│   ├── gen-skill-docs.ts             ← build script (~80 lines)
+│   ├── discover-skills.ts            ← finds .tmpl files (~30 lines)
+│   └── resolvers/
+│       ├── index.ts                  ← RESOLVERS registry
+│       ├── preamble.ts               ← {{PREAMBLE}}: session count + paths + timeline + learnings read
+│       ├── auq-format.ts             ← {{AUQ_FORMAT}}: decision brief spec
+│       ├── voice-rules.ts            ← {{VOICE_RULES}}: ETHOS §2 reference
+│       └── completion-status.ts      ← {{COMPLETION_STATUS}}
+└── setup.md                          ← runs `bun run gen:skill-docs` then symlinks
+```
+
+Total ~200 lines of build infrastructure. CI freshness check
+(`gen-skill-docs --dry-run` + `git diff --exit-code`) prevents
+committing stale generated files.
+
+See [Open architectural items](#open-architectural-items) below for
+the trigger condition.
+
 ## Cross-skill cohesion mechanisms
 
 Pod skills work together because they share conventions, not because
@@ -351,6 +487,99 @@ RPC.
 - **Not a research-content store.** Pod stores YOUR reasoning about
   investments. The underlying research data (10-Ks, calls, news)
   lives wherever you read it.
+
+## Open architectural items
+
+The build pipeline, meta-orchestrator, and a few other cohesion
+infrastructure pieces are roadmapped but not built. Each has an
+explicit trigger condition so the work happens when it's actually
+needed.
+
+### D — Templating + build system (the encoding mechanism)
+
+**The biggest open item.** Pod currently has no templating layer.
+Shared preamble blocks (parallel-session counter, timeline read,
+learnings read) are hand-copied across the 3 MVP skills. Drift risk
+is linear with skill count.
+
+**What to build:**
+
+```
+~/Code/pod/
+├── pod/<skill>/SKILL.md.tmpl        (hand-edited)
+├── pod/<skill>/SKILL.md             (generated, committed)
+├── scripts/
+│   ├── gen-skill-docs.ts            (~80 LOC build script)
+│   ├── discover-skills.ts           (~30 LOC, finds .tmpl files)
+│   └── resolvers/
+│       ├── index.ts                 (RESOLVERS registry)
+│       ├── preamble.ts              ({{PREAMBLE}} emitter)
+│       ├── auq-format.ts            ({{AUQ_FORMAT}} emitter)
+│       ├── voice-rules.ts           ({{VOICE_RULES}} reference)
+│       └── completion-status.ts
+└── (CI check: gen-skill-docs --dry-run + git diff --exit-code)
+```
+
+Total: ~200 lines of TypeScript + the .tmpl edits.
+
+**Trigger to build:**
+
+- Pod hits 7+ skills, OR
+- The first shared-block drift bug appears (a preamble line in skill
+  A that's missing from skill B), OR
+- The shared preamble grows past ~50 lines
+
+**Until then:** hand-copy with ETHOS §-references in each duplicated
+block (e.g., `# Parallel session awareness (ETHOS §8 — keep in sync)`).
+The references label every duplicated block with its canonical source,
+making the eventual refactor mechanical.
+
+### `/pod-autoplan` (meta-orchestrator pattern)
+
+When v1 skills `/pod-bear-case` + `/pod-cio-review` + `/pod-risk-officer`
+ship, they'll likely be chainable via a meta-orchestrator like gstack's
+`/autoplan`. Reads other SKILL.md files as data, runs them in sequence
+with auto-decisions on mechanical questions, surfaces only taste
+decisions to the user.
+
+**Trigger to build:** when 3+ chainable skills exist and the chain is
+common enough that running them individually feels redundant.
+
+### Handoff notes between skills
+
+Gstack pattern: when one skill defers to another (e.g.,
+`/plan-ceo-review` pauses for the user to run `/office-hours` first),
+it writes a handoff note (`<branch>-ceo-handoff-*.md`) with what was
+discussed. The picking-up skill reads the note and resumes context.
+
+**Pod equivalent (future):** `book/_handoffs/YYYYMMDD-HHMMSS-*.md` for
+mid-chain context.
+
+**Trigger to build:** when pod has skills that defer to other skills
+(e.g., `/pod-cio-review` discovers no thesis doc exists and wants to
+chain into `/pod-thesis-hours`).
+
+### Learnings rotation
+
+`book/_events/learnings.jsonl` grows unbounded. Gstack handles this
+via attempts.jsonl rotation (10MB, 5 generations). Pod will need the
+same pattern when learnings hit ~1MB.
+
+**Trigger to build:** when `wc -l book/_events/learnings.jsonl` exceeds
+1000 entries, OR users report stale insights surfacing.
+
+### CLAUDE.md skill routing injection
+
+Gstack writes a `## Skill routing` section to the user's project
+CLAUDE.md so Claude Code proactively routes user intent to skills
+(e.g., user says "I have an idea" → invoke `/office-hours`). Pod
+deliberately does NOT do this — per the workspace separation rule,
+pod doesn't write to the user's CLAUDE.md. Pod relies on skill
+frontmatter descriptions for routing.
+
+**Trigger to revisit:** if skill descriptions stop being enough for
+Claude Code to route correctly (e.g., ambiguous overlap between two
+skills' descriptions).
 
 ## Versioning
 
