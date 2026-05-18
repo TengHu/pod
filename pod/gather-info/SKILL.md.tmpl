@@ -280,6 +280,310 @@ The gap will surface in the gather doc and in
 
 ---
 
+## Step 3.5: Open-data source catalog (WebFetch-first)
+
+When a `vendor: web` or `vendor: sec` row needs a fetch and the user
+opts in (per Step 3 W<N> AUQ), consult this catalog for the canonical
+public URL pattern. **Prefer (open) sources first** — these are
+WebFetch-able without authentication. (paywall) sources are
+WebFetch-able for known articles but may return truncated content for
+non-subscribers. (api) sources require API keys not in this skill's
+allowed-tools and should be skipped unless the user wires them up.
+
+### Source-routing heuristic by fetch hint
+
+| Fetch hint contains... | First-try source |
+|---|---|
+| "10-K", "10-Q", "8-K", "S-1", "proxy", "20-F", "13F", "Form 4" | SEC EDGAR full-text |
+| "earnings call", "transcript", "prepared remarks" | Motley Fool / Globe & Mail / Quartr |
+| "earnings press release", "guidance" | Company IR / BusinessWire / GlobeNewswire |
+| "short interest", "borrow rate", "utilization", "shares available" | ChartExchange (rate + avail) / MarketBeat (SI + days-to-cover) / Iborrowdesk (IBKR borrow) |
+| "options chain", "OI", "IV" | Alpaca MCP (preferred) / Barchart / Yahoo options |
+| "13F", "institutional holdings" | 13F.info / WhaleWisdom / Hedge Follow |
+| "insider", "Form 4", "insider buying" | OpenInsider / SEC EDGAR forms=4 |
+| "analyst PT", "consensus estimate", "rating change" | TipRanks / Zacks / MarketBeat |
+| "credit rating", "rating action", "downgrade", "DDTL", "indenture" | Moody's / Fitch / S&P / DBRS issuer pages + EDGAR |
+| "credit spread", "OAS", "HY", "IG" | FRED |
+| "bond price", "TRACE", "yield" | FINRA TRACE (finra-markets.morningstar.com) |
+| "macro", "rates", "unemployment", "CPI", "PCE", "PPI" | FRED + BEA + BLS |
+| "Fed rate", "FOMC", "rate hike probability" | CME FedWatch |
+| "hyperscaler capex", "AMZN capex", "MSFT capex" | each company's 10-Q + IR slides + Q&A transcript |
+| "GPU pricing", "AI infra supply", "neocloud" | SemiAnalysis free posts / The Information ($) / company calls |
+| "datacenter buildout", "power", "MW" | Data Center Dynamics / Datacenter Knowledge / EIA Form 860 |
+| "Chinese reaction", "港股", "中概", "A股" | Xueqiu / EastMoney 股吧 / HKEX news / 财联社 |
+| "satellite imagery", "vessel tracking", "supply chain" | MarineTraffic / FlightRadar24 (free tiers) |
+| "ETF flows", "sector rotation" | etf.com / ETFdb / SectorSPDR |
+| "congressional trading" | Quiver Quant / Capitol Trades |
+| "futures positioning", "COT" | CFTC public reports |
+| "retail sentiment", "AAII", "NAAIM" | AAII survey / NAAIM index / Stocktwits |
+
+### Filings + primary disclosures (open)
+
+| Source | Access pattern | Returns |
+|---|---|---|
+| SEC EDGAR full-text | `https://efts.sec.gov/LATEST/search-index?q=%22<TICKER>%22&forms=<FORM>` | filing list JSON/HTML |
+| SEC EDGAR company facts | `https://data.sec.gov/api/xbrl/companyfacts/CIK<10-digit-padded>.json` | XBRL fundamentals JSON |
+| SEC EDGAR submissions | `https://data.sec.gov/submissions/CIK<padded>.json` | filing history JSON |
+| SEC EDGAR filing index | `https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=<ticker>&type=<form>&dateb=&owner=include&count=40` | filing page HTML |
+| Bamsec | `https://www.bamsec.com/companies/<cik>/<ticker>` | clean EDGAR wrapper |
+| SEDAR+ (Canadian) | `https://www.sedarplus.ca` | Canadian filings |
+| HKEXnews | `https://www.hkexnews.hk/index.htm` | HK filings + news |
+| FCA NSM (UK) | `https://data.fca.org.uk/#/nsm/` | UK regulated filings |
+| Company IR | `https://investors.<company>.com/` (vary) | press releases + deck PDFs |
+| BusinessWire | `https://www.businesswire.com/portal/site/home/?searchTerm=<ticker>` | press releases |
+| GlobeNewswire | `https://www.globenewswire.com/Search?keyword=<ticker>` | press releases |
+| PR Newswire | `https://www.prnewswire.com/search/news/?keyword=<ticker>` | press releases |
+
+### Earnings transcripts (open + paywall)
+
+| Source | Access pattern | Notes |
+|---|---|---|
+| Motley Fool | `https://www.fool.com/earnings/call-transcripts/` (search by ticker) | (open), often same-day full Q&A |
+| Globe and Mail | `https://www.theglobeandmail.com/investing/markets/stocks/<TICKER>/pressreleases/` | (open), good archive |
+| Quartr | `https://quartr.com/companies/<ticker>` | (open) free tier; transcripts + audio |
+| Stockanalysis | `https://stockanalysis.com/stocks/<ticker>/transcripts/` | (open) |
+| TIKR | `https://www.tikr.com/stock/<TICKER>/transcripts` | (open) free tier |
+| AOL/Yahoo aggregators | varies | (open) full transcripts surfaced |
+| Seeking Alpha | `https://seekingalpha.com/symbol/<TICKER>/earnings/transcripts` | (paywall $) — first paragraphs visible |
+
+### Fundamentals + screening (open)
+
+| Source | Access pattern | Returns |
+|---|---|---|
+| Stockanalysis | `https://stockanalysis.com/stocks/<ticker>/financials/` | 10-year financials |
+| Macrotrends | `https://www.macrotrends.net/stocks/charts/<TICKER>/<slug>/<metric>` | long-history ratios |
+| Yahoo Finance | `https://finance.yahoo.com/quote/<TICKER>/` | quotes + basics |
+| Finviz | `https://finviz.com/quote.ashx?t=<TICKER>` | screener + news + ratios |
+| WSJ Markets | `https://www.wsj.com/market-data/quotes/<TICKER>/financials` | basics (paywall $ for full) |
+| GuruFocus | `https://www.gurufocus.com/stock/<TICKER>/summary` | DCF + valuation, free tier |
+| Simply Wall St | `https://simplywall.st/stocks/us/<sector>/<TICKER>/` | stock report |
+| TIKR | `https://www.tikr.com/stock/<TICKER>` | Capital IQ-style data |
+
+### Real-time price + charts
+
+| Source | Access | Notes |
+|---|---|---|
+| Alpaca MCP | `mcp__alpaca__get_stock_snapshot` and family | preferred, already wired |
+| TradingView quote page | `https://www.tradingview.com/symbols/<EXCH>-<TICKER>/` | (open) quote + chart context |
+| Finviz | `https://finviz.com/quote.ashx?t=<TICKER>` | (open) quote + 1d chart |
+| Yahoo Finance | `https://finance.yahoo.com/quote/<TICKER>/` | (open) delayed quote |
+| Polygon.io | (api $) | real-time + historical |
+| Tiingo | (api $) | real-time + fundamentals |
+| Alpha Vantage | (api free-tier) | rate-limited |
+| yfinance (Python) | (api, no key) | unofficial, batch-friendly |
+
+### Short interest + borrow + squeeze (open)
+
+| Source | Access pattern | Returns |
+|---|---|---|
+| NASDAQ SI | `https://www.nasdaq.com/market-activity/stocks/<TICKER>/short-interest` | bi-monthly official SI |
+| MarketBeat | `https://www.marketbeat.com/stocks/NASDAQ/<TICKER>/short-interest/` | SI %, days-to-cover, change |
+| ChartExchange | `https://chartexchange.com/symbol/<exch>-<TICKER>/borrow-fee/` | daily CTB rate, shares available |
+| Iborrowdesk | `https://iborrowdesk.com/report/<TICKER>` | IBKR borrow history |
+| StockGrid | `https://stockgrid.io/stock/<TICKER>` | short volume daily |
+| FINRA short volume | `https://www.finra.org/finra-data/browse-catalog/short-sale-volume-data/daily-short-sale-volume-files` | regulatory short volume |
+| Fintel SI | `https://fintel.io/ss/us/<TICKER>` | (paywall $) SI estimate, utilization |
+| Ortex | (paywall $$) | real-time SI + utilization + CTB |
+| S3 Partners | (paywall $$$) | proprietary float-adjusted SI |
+
+### Options data
+
+| Source | Access | Returns |
+|---|---|---|
+| Alpaca MCP | `mcp__alpaca__get_option_chain` / `get_option_snapshot` | chain, OI, IV (preferred) |
+| Barchart | `https://www.barchart.com/stocks/quotes/<TICKER>/options` | chain + IV rank |
+| MarketChameleon | `https://marketchameleon.com/Overview/<TICKER>/` | IV30, skew, earnings move history |
+| OCC stats | `https://www.theocc.com/Market-Data/Market-Data-Reports/Volume-and-Open-Interest/` | clearing data |
+| Yahoo options | `https://finance.yahoo.com/quote/<TICKER>/options` | basic chain |
+| Unusual Whales | (paywall $$) | sweep flow + dark pool |
+| Tradytics | (paywall $$) | flow + GEX/DEX |
+| SpotGamma / SqueezeMetrics | (paywall $$) | dealer gamma positioning |
+
+### Insider + institutional (open)
+
+| Source | Access pattern | Returns |
+|---|---|---|
+| OpenInsider | `http://openinsider.com/screener?s=<TICKER>` | Form 4 transactions |
+| SEC EDGAR Form 4 | EDGAR full-text `forms=4` | raw insider filings |
+| 13F.info | `https://13f.info/stock/<TICKER>` or `/manager/<cik>` | 13F lookup |
+| WhaleWisdom | `https://whalewisdom.com/stock/<TICKER>` | 13F filing change |
+| Hedge Follow | `https://hedgefollow.com/stocks/<TICKER>/Top-Holders` | top institutional holders |
+| Capitol Trades | `https://www.capitoltrades.com/issuers/<slug>` | congressional trades |
+| Quiver Quant | `https://www.quiverquant.com/stocks/<TICKER>/` | congressional + alt data |
+| Fintel ownership | `https://fintel.io/so/us/<TICKER>` | (paywall $) institutional rollup |
+
+### Analyst estimates + PT (open + paywall)
+
+| Source | Access pattern |
+|---|---|
+| TipRanks | `https://www.tipranks.com/stocks/<ticker>/forecast` |
+| Zacks | `https://www.zacks.com/stock/quote/<TICKER>` |
+| MarketBeat ratings | `https://www.marketbeat.com/stocks/NASDAQ/<TICKER>/forecast/` |
+| Stockanalysis estimates | `https://stockanalysis.com/stocks/<ticker>/forecast/` |
+| Estimize | `https://www.estimize.com/<TICKER>` |
+| Visible Alpha | (paywall $$$) — segment-level consensus |
+
+### Credit + debt + ratings (open)
+
+| Source | Access pattern | Returns |
+|---|---|---|
+| FRED | `https://fred.stlouisfed.org/series/<series-id>` | macro + credit spreads |
+| FRED HY OAS | series `BAMLH0A0HYM2` | ICE BofA HY spread |
+| FRED IG OAS | series `BAMLC0A0CM` | ICE BofA IG spread |
+| FINRA TRACE | `https://finra-markets.morningstar.com/BondCenter/Default.jsp` | bond trade data |
+| Moody's | `https://www.moodys.com/research/<doc-id>` | rating press releases |
+| Fitch | `https://www.fitchratings.com/entity/<entity-id>` | rating actions |
+| S&P Global Ratings | `https://www.spglobal.com/ratings/en/regulatory/article/-/view/id/<id>` | rating filings |
+| DBRS Morningstar | `https://dbrs.morningstar.com/issuers/<id>` | rating actions |
+| CreditSights | (paywall $$$) — credit research |
+
+### News (open + paywall)
+
+| Source | Access pattern |
+|---|---|
+| Yahoo Finance news | `https://finance.yahoo.com/quote/<TICKER>/news/` |
+| Google News | `https://news.google.com/search?q=<TICKER>` |
+| MarketWatch | `https://www.marketwatch.com/investing/stock/<ticker>` |
+| Reuters | `https://www.reuters.com/search/news?blob=<ticker>` |
+| Stocktwits | `https://stocktwits.com/symbol/<TICKER>` |
+| Benzinga | `https://www.benzinga.com/quote/<TICKER>` (mixed paywall) |
+| Bloomberg | `https://www.bloomberg.com/quote/<TICKER>:US` (paywall $) |
+| WSJ | `https://www.wsj.com/market-data/quotes/<TICKER>` (paywall $) |
+| FT | `https://www.ft.com/content/<id>` (paywall $) |
+| The Information | (paywall $$) |
+| Semafor / Axios | (open) sector newsletters |
+
+### Industry + sector (mix)
+
+| Source | Access | Coverage |
+|---|---|---|
+| SemiAnalysis (free posts) | `https://semianalysis.com/` | semis + AI infra (paywall $$ for premium) |
+| Stratechery | `https://stratechery.com/` (paywall $) | tech strategy |
+| Latent Space | `https://latent.space/` (open) | AI infra newsletter |
+| Data Center Dynamics | `https://www.datacenterdynamics.com/en/` (open) | DC buildout |
+| Datacenter Knowledge | `https://www.datacenterknowledge.com/` (open) | DC industry |
+| Uptime Institute | `https://uptimeinstitute.com/resources` (open) | DC research |
+| Synergy Research | `https://www.srgresearch.com/` (paywall $$) | hyperscaler share |
+| IEA | `https://www.iea.org/data-and-statistics` (open) | energy |
+| EIA | `https://www.eia.gov/` (open) | US energy + Form 860/923 power data |
+| DigiTimes | `https://www.digitimes.com/` (open) | Asia tech supply chain |
+| TrendForce | `https://www.trendforce.com/` (open) | memory + display |
+| TechInsights | `https://www.techinsights.com/` (paywall $) | chip teardowns |
+| CB Insights / PitchBook | (paywall $$$) | private market |
+
+### Macro + economic (open)
+
+| Source | Access pattern | Returns |
+|---|---|---|
+| FRED | `https://fred.stlouisfed.org/series/<id>` | all macro series |
+| BEA | `https://www.bea.gov/data/` | GDP, trade, capital flows |
+| BLS | `https://www.bls.gov/data/` | jobs, CPI, PPI |
+| Census | `https://www.census.gov/economic-indicators/` | economic indicators |
+| EIA weekly | `https://www.eia.gov/petroleum/weekly/` | oil + nat gas |
+| Trading Economics | `https://tradingeconomics.com/<country>/<metric>` | global comps |
+| Investing.com calendar | `https://www.investing.com/economic-calendar/` | release calendar |
+| ForexFactory | `https://www.forexfactory.com/calendar` | release calendar |
+| CME FedWatch | `https://www.cmegroup.com/markets/interest-rates/cme-fedwatch-tool.html` | Fed rate probabilities |
+| NY Fed Liberty Street | `https://libertystreeteconomics.newyorkfed.org/` | research notes |
+
+### Alternative data (open + paywall)
+
+| Source | Access pattern | Returns |
+|---|---|---|
+| LinkedIn jobs | `https://www.linkedin.com/jobs/search?keywords=<company>` | hiring trend proxy |
+| Glassdoor | `https://www.glassdoor.com/Reviews/<slug>` | employee sentiment |
+| SimilarWeb | `https://www.similarweb.com/website/<domain>/` (limited free) | web traffic |
+| Sensor Tower | `https://app.sensortower.com/overview/<id>` (limited free) | app downloads |
+| Google Trends | `https://trends.google.com/trends/explore?q=<term>` | search interest |
+| Wayback Machine | `https://web.archive.org/web/*/<url>` | historical site state |
+| MarineTraffic | `https://www.marinetraffic.com/en/ais/home` (free tier) | vessel tracking |
+| FlightRadar24 | `https://www.flightradar24.com/` (free tier) | flight tracking |
+| YipitData / Earnest / Second Measure | (paywall $$$) | credit card panel |
+| Thinknum / Orbital Insight / Spire | (paywall $$$) | scraped + satellite + AIS |
+| Placer.ai | (paywall $$) | foot traffic |
+
+### Social + sentiment (open)
+
+| Source | Access pattern |
+|---|---|
+| X / Twitter | xurl skill or `https://twitter.com/search?q=%24<TICKER>` (cashtag) |
+| Reddit | `https://www.reddit.com/r/wallstreetbets/search.json?q=<TICKER>&restrict_sr=1&sort=new` |
+| Reddit r/investing, r/options, r/stocks | same JSON pattern, swap subreddit |
+| Stocktwits | `https://stocktwits.com/symbol/<TICKER>` |
+| SwaggyStocks | `https://swaggystocks.com/dashboard/wallstreetbets/ticker-sentiment` |
+| Substack (free) | Doomberg, Net Interest (Marc Rubinstein), Latent Space, Stratechery free |
+
+### ETF + flow + positioning (open)
+
+| Source | Access pattern | Returns |
+|---|---|---|
+| etf.com | `https://www.etf.com/<ETF>` | holdings + flows |
+| ETFdb | `https://etfdb.com/etf/<ETF>/` | screener + flows |
+| SPDR by State Street | `https://www.ssga.com/us/en/individual/etfs/` | sector ETF flows |
+| CFTC COT | `https://www.cftc.gov/MarketReports/CommitmentsofTraders/index.htm` | futures positioning |
+| NAAIM | `https://www.naaim.org/programs/naaim-exposure-index/` | active manager equity exposure |
+| AAII sentiment | `https://www.aaii.com/sentimentsurvey` | retail bull/bear weekly |
+
+### Chinese-language platforms (open)
+
+Useful for US-listed Chinese names, HK-listed, A-share names, and
+Chinese-investor perspective on US AI/tech stories.
+
+| Source | Access pattern | Returns |
+|---|---|---|
+| 雪球 Xueqiu (US ticker) | `https://xueqiu.com/S/<TICKER>` | discussions + financials + Chinese-analyst posts |
+| 东方财富 EastMoney 股吧 | `https://guba.eastmoney.com/list,<code>.html` | retail commentary |
+| 东方财富 quote | `https://quote.eastmoney.com/<code>.html` | quotes + 资金流向 |
+| 格隆汇 Gelonghui | `https://www.gelonghui.com/` | HK/US Chinese coverage |
+| 财联社 Cailianshe | `https://www.cls.cn/` | China financial news |
+| 36氪 36Kr | `https://36kr.com/` | China tech industry |
+| 未来智库 vzkoo | `https://www.vzkoo.com/` | industry research reports |
+| 港交所 HKEXnews | `https://www.hkexnews.hk/index.htm` | HK filings |
+| 知乎 Zhihu | `https://www.zhihu.com/search?q=<ticker>` | long-form analysis |
+| Wind 万得 / 同花顺 iFinD / Choice | (paywall $$$) | China institutional terminals |
+
+### Paid + API sources (not in current allowed-tools)
+
+The following require API keys or paid subscriptions and are not
+WebFetch-callable for full content. Future `assumptions.yaml` rows
+may name them in `fetch` strings; the user wires up the MCP server
+or API access separately.
+
+- **Market data APIs**: Polygon.io, Tiingo, Finnhub, Alpha Vantage, EOD Historical Data, Refinitiv Eikon, Bloomberg API (BLPAPI), FactSet
+- **Options flow + dealer positioning**: Unusual Whales, Tradytics, SpotGamma, SqueezeMetrics, MarketChameleon pro
+- **Short interest pro**: Ortex, S3 Partners
+- **Transcripts + filings search**: AlphaSense, Hebbia, Calcbench, EDGAR Online
+- **Sell-side / sector research**: Visible Alpha, CreditSights, SemiAnalysis premium, The Information, Stratechery full
+- **Alternative data**: YipitData, Earnest Analytics, Second Measure, Thinknum, Orbital Insight, Spire, Sensor Tower full, data.ai, Placer.ai
+- **Chinese terminals**: Wind 万得, 同花顺 iFinD, Choice 数据
+- **News + research**: FT, WSJ, Barron's, Bloomberg Terminal, Punchbowl, Politico Pro, DataTrek, Bespoke
+
+### Source-selection rules
+
+- **Open before paywall.** If two sources cover the same data and one
+  is open and the other paywalled, fetch the open one. Only surface
+  paywall sources if open returns insufficient detail.
+- **Primary before aggregator.** SEC EDGAR before Stockanalysis for
+  filings. Company IR before Reuters for press releases. FRED before
+  Trading Economics for macro. Aggregators are fine when speed
+  matters or the primary source is slow.
+- **Two sources for big claims.** Cross-check market-moving data
+  (short interest, capex guidance, M&A, ratings) across at least two
+  sources before treating as canonical. Surface divergence verbatim
+  in the gather doc summary (e.g., "NASDAQ 13.82% vs S3 45%").
+- **Date-stamp every fetch.** Include the `as of` timestamp in the
+  summary line. Stale data is fine if labeled stale.
+- **Skip JS-heavy SPAs.** WebFetch returns the static HTML response.
+  Sites that hydrate via JS (Bloomberg quote tickers, full TradingView
+  charts, Refinitiv portals) return useless content. Use the
+  alternative listed in this catalog.
+- **WebSearch first if URL unknown.** When the canonical URL pattern
+  isn't obvious from the row's `fetch` hint, run WebSearch with the
+  hint as the query and pick the top open-data result before falling
+  back to a paywalled source.
+
+---
+
 ## Step 4: Write the gather doc
 
 ```bash
