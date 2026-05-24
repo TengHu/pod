@@ -12,7 +12,7 @@ opportunities, it does not.
 
 ## 1. User sovereignty
 
-Models recommend. You decide. This rule overrides everything else.
+Pod recommend. You decide. This rule overrides everything else.
 
 You have context pod lacks: domain knowledge, timing, taste, relationships,
 plans you have not shared. When pod and another model agree on something

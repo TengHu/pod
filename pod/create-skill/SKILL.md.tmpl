@@ -1,0 +1,411 @@
+---
+name: pod-create-skill
+description: |
+  Scaffold a new pod skill. Reads every existing skill's SKILL.md.tmpl
+  in ~/Code/pod/pod/ first so the new skill matches current conventions
+  (frontmatter shape, placeholder usage, step structure, hard rules
+  block). Asks the user via AskUserQuestion for slug, description,
+  triggers, allowed-tools, and which existing skill to model after.
+  Writes pod/<slug>/SKILL.md.tmpl, then runs `bun run gen:skill-docs`
+  to produce the final SKILL.md. Does not commit or reinstall.
+allowed-tools:
+  - Bash
+  - Read
+  - Write
+  - Edit
+  - Grep
+  - Glob
+  - AskUserQuestion
+triggers:
+  - create pod skill
+  - new pod skill
+  - scaffold skill
+  - add skill
+  - new skill
+---
+
+# /pod-create-skill — scaffold a new pod skill
+
+You are a skill-scaffolding assistant. The user wants to add a new
+skill to the pod source tree. Your job: read every existing skill
+template, ask the user the minimum needed to fill in the standard
+frontmatter, generate a new `SKILL.md.tmpl` matching pod's
+conventions, then run the build.
+
+**Hard gate:** This skill writes ONLY into `~/Code/pod/pod/<slug>/`.
+It does NOT touch `book/`, does NOT commit, does NOT push, does NOT
+reinstall symlinks. Those are the user's calls.
+
+**Voice rules apply** (see `~/Code/pod/ETHOS.md` §2): concrete, no AI
+hedge-speak, no em dashes.
+
+**AskUserQuestion is mandatory for every user input** (ETHOS §3). No
+plain chat prompts. If AUQ is unavailable, stop and report
+`BLOCKED — AskUserQuestion unavailable`.
+
+---
+
+## Step 0: Resolve POD_SRC
+
+```bash
+POD_SRC="${POD_SRC:-$HOME/Code/pod}"
+echo "POD_SRC=$POD_SRC"
+[ -d "$POD_SRC/pod" ] && echo "POD_SRC_OK" || echo "POD_SRC_MISSING"
+[ -f "$POD_SRC/scripts/gen-skill-docs.ts" ] && echo "BUILD_SCRIPT_OK" || echo "BUILD_SCRIPT_MISSING"
+[ -f "$POD_SRC/package.json" ] && echo "PACKAGE_JSON_OK" || echo "PACKAGE_JSON_MISSING"
+```
+
+If any `*_OK` marker is missing, stop and report:
+
+> `BLOCKED — pod source incomplete at $POD_SRC.` Need: `pod/` dir,
+> `scripts/gen-skill-docs.ts`, `package.json`. Run
+> `cd $POD_SRC && git pull` to refresh, or override the `POD_SRC` env
+> var to point at the right path.
+
+---
+
+{{PREAMBLE}}
+
+## Step 2: Survey existing skills
+
+This skill scaffolds from existing skills, not from pre-baked
+templates. Read what's there now so the new skill matches current
+conventions.
+
+```bash
+echo "=== EXISTING SKILLS ==="
+for d in "$POD_SRC"/pod/*/; do
+  name=$(basename "$d")
+  [ "$name" = "create-skill" ] && continue
+  tmpl="$d/SKILL.md.tmpl"
+  if [ -f "$tmpl" ]; then
+    desc=$(awk '/^description: \|/{flag=1; next} flag && /^[a-z-]+:/{flag=0} flag' "$tmpl" \
+      | head -3 | tr '\n' ' ' | sed 's/  */ /g;s/^ *//')
+    lines=$(wc -l < "$tmpl" | tr -d ' ')
+    echo "- $name ($lines lines) : $desc"
+  else
+    echo "- $name : (no template)"
+  fi
+done
+echo "======================"
+```
+
+For each existing skill template, **use the Read tool** (not `cat`)
+to load the full content into working memory. You need:
+
+- Frontmatter shape (name, description, allowed-tools, triggers)
+- Which placeholders the template uses (PREAMBLE, VOICE_RULES,
+  AUQ_FORMAT, HARD_RULES_BASE — pod's resolvers per
+  `scripts/resolvers/index.ts`)
+- Step structure (numbered `## Step N: <title>` headers)
+- Hard rules block at the bottom
+
+The user will pick one of these existing skills as the model for the
+new one, or pick "from scratch" for a minimal skeleton.
+
+---
+
+## Step 3: AskUserQuestion — slug for the new skill
+
+```
+D0 — Slug for the new skill
+ELI10: kebab-case identifier. Folder will be pod/<slug>/, invocation
+       will be /pod-<slug> after install. Do NOT include the "pod-"
+       prefix — the install procedure adds it as the symlink name.
+       Existing skills: <comma-separated list from Step 2>
+Options:
+A) Type the slug (recommended)
+B) Cancel
+```
+
+Capture the user's answer, then sanitize:
+
+```bash
+RAW="$USER_INPUT"
+SLUG=$(printf '%s' "$RAW" | tr '[:upper:]' '[:lower:]' | tr -s ' \t_' '-' \
+  | tr -cd 'a-z0-9-' | sed 's/^pod-//' | sed 's/^-*//;s/-*$//' | cut -c1-50)
+[ -z "$SLUG" ] && SLUG="new-skill"
+NEW_DIR="$POD_SRC/pod/$SLUG"
+[ -d "$NEW_DIR" ] && echo "SLUG_TAKEN" || echo "SLUG_OK"
+```
+
+If `SLUG_TAKEN`, stop and report:
+
+> `BLOCKED — skill $SLUG already exists at $NEW_DIR.` Pick a different
+> slug, or remove the directory manually if you want to start over.
+
+---
+
+## Step 4: AskUserQuestion — one-line description
+
+```
+D1 — One-sentence description of what this skill does
+ELI10: becomes the `description:` field in the new skill's frontmatter.
+       Claude Code reads this to decide when to route a user's request
+       to your skill. Be concrete: name the inputs, the action, the
+       output. Example for /pod-thesis-hours: "Walk the user through
+       forcing questions and write a dated thesis doc."
+Options:
+A) Type the description (recommended)
+B) Cancel
+```
+
+Capture verbatim. Light typo fixes only.
+
+---
+
+## Step 5: AskUserQuestion — model skill or from scratch
+
+Build the options from existing skills surveyed in Step 2:
+
+```
+D2 — Which existing skill should the new one be modeled after?
+ELI10: pod's existing skills are the archetypes. Pick the one whose
+       structure most closely matches what you want to build. The
+       scaffold copies the step structure and adapts the frontmatter.
+       Pick "from scratch" for a minimal skeleton (frontmatter +
+       preamble + hard rules, body is TODO).
+
+A) <existing-skill-1> — <one-line gist from its description>
+B) <existing-skill-2> — <one-line gist>
+C) <existing-skill-3> — <one-line gist>
+...
+Z) From scratch — minimal skeleton, I'll write the body
+```
+
+The options come from Step 2's `EXISTING SKILLS` list, not from a
+hardcoded set. If pod adds new skills, they show up here automatically
+next time. Recommend the existing skill whose description most closely
+matches the user's D1 answer (keyword overlap).
+
+---
+
+## Step 6: AskUserQuestion — triggers
+
+```
+D3 — Trigger phrases (comma-separated)
+ELI10: natural-language phrases that should route to your skill.
+       Pick 3-6. Example for /pod-thesis-hours: "thesis hours,
+       capture thesis, new thesis, refresh thesis".
+Options:
+A) Type the triggers (recommended)
+B) Use defaults based on slug ("<slug>", "new <slug>", "run <slug>")
+C) Cancel
+```
+
+Build YAML list:
+
+```bash
+TRIGGERS_YAML=$(printf '%s' "$RAW_TRIGGERS" | tr ',' '\n' \
+  | sed 's/^ *//;s/ *$//' | awk 'NF{print "  - " $0}')
+```
+
+---
+
+## Step 7: AskUserQuestion — allowed-tools
+
+Default = the allowed-tools list of the model skill picked in Step 5
+(read it from the model skill's frontmatter). If "from scratch", use
+`Bash, Read, AskUserQuestion`.
+
+```
+D4 — Allowed tools for this skill
+ELI10: which Claude tools the skill is permitted to invoke. Pod skills
+       always include Bash, Read, and AskUserQuestion. Add Write/Edit
+       if the skill produces files. Add Grep/Glob if it searches.
+       Recommended (from model skill <name>): <comma-separated list>.
+Options:
+A) Use recommended (from model skill) (recommended)
+B) I'll specify a custom list (comma-separated)
+C) Cancel
+```
+
+If B, validate against the allowed set (`Bash, Read, Write, Edit,
+Grep, Glob, AskUserQuestion, WebFetch, WebSearch`). Reject unknown
+tool names and re-ask.
+
+Build YAML list the same way as Step 6.
+
+---
+
+## Step 8: Write the new SKILL.md.tmpl
+
+The output file is `$NEW_DIR/SKILL.md.tmpl`. The shape:
+
+```
+---
+name: pod-<slug>
+description: |
+  <D1 answer, line-wrapped at 72 chars>
+allowed-tools:
+<TOOLS_YAML>
+triggers:
+<TRIGGERS_YAML>
+---
+
+# /pod-<slug> — TODO: one-line tagline
+
+<one paragraph stub: name the user-facing purpose. TODO comment for
+the user to fill in.>
+
+**Voice rules apply** (see `~/Code/pod/ETHOS.md` §2): ...
+**AskUserQuestion is mandatory for every user input** (ETHOS §3): ...
+
+---
+
+## Step 0: <stub appropriate to the model skill>
+
+<copy the model skill's Step 0 verbatim if it's generic (e.g., resolve
+THESIS_SLUG via pod-thesis-list + AUQ), or stub it as TODO if the model
+skill's Step 0 is too specific to copy>
+
+---
+
+{{ PREAMBLE }}
+
+## Step 2-N: <one section per step in the model skill>
+
+For each numbered Step in the model skill, emit a corresponding stub:
+- Keep the section heading (`## Step N: <title>`)
+- Replace the body with a TODO comment naming what this step should do,
+  inspired by the model skill but specific to the new skill
+- Preserve any `{{ RESOLVER }}` placeholders (PREAMBLE, VOICE_RULES,
+  AUQ_FORMAT, HARD_RULES_BASE) from the model skill — they're the
+  cohesion mechanism
+
+---
+
+## Hard rules
+
+{{ HARD_RULES_BASE }}
+- TODO: add any skill-specific hard rules below this line.
+```
+
+**Important:** the literal `{{ }}` placeholder names in the body above
+must be written WITHOUT spaces inside the braces in the actual output
+file (i.e., the no-space brace form). pod's regex in
+`scripts/gen-skill-docs.ts` matches `{{` immediately followed by a
+word char. Any `{{ NAME }}` form (with internal spaces) is inert and
+safe to use in prose; the no-space form is what gets resolved.
+
+Use the Write tool to create `$NEW_DIR/SKILL.md.tmpl`. Build the
+content in working memory by combining:
+
+1. Frontmatter (name, description, allowed-tools, triggers) from
+   user inputs in Steps 3-7
+2. Body skeleton derived from the model skill picked in Step 5:
+   - If "from scratch": minimal skeleton (frontmatter + `{{ PREAMBLE }}`
+     + one TODO step + `{{ HARD_RULES_BASE }}`) — written WITHOUT the
+     internal spaces in the actual output file so they resolve at build
+     time
+   - Otherwise: walk the model skill's steps, copy section headings,
+     replace bodies with TODO stubs that reference the model
+
+After writing, verify the file is non-empty and parses as valid
+markdown by reading it back. If the frontmatter is malformed (missing
+closing `---`), BLOCK and report.
+
+---
+
+## Step 9: Run the build
+
+```bash
+cd "$POD_SRC"
+if [ ! -d node_modules ]; then
+  bun install --silent 2>&1 | tail -10
+fi
+bun run gen:skill-docs 2>&1 | tail -20
+BUILD_STATUS=$?
+echo "BUILD_STATUS=$BUILD_STATUS"
+[ -f "$NEW_DIR/SKILL.md" ] && echo "SKILL_MD_OK" || echo "SKILL_MD_MISSING"
+```
+
+If `BUILD_STATUS != 0`, surface the output and stop:
+
+> `BLOCKED — bun run gen:skill-docs failed.` Most common causes:
+> (1) unresolved placeholder in the new template (typo in a
+> `{{ NAME }}`-style token); (2) placeholder name not registered in
+> `scripts/resolvers/index.ts`; (3) malformed YAML frontmatter.
+> Fix `$NEW_DIR/SKILL.md.tmpl`, then re-run `bun run gen:skill-docs`
+> manually. To start clean: `rm -rf $NEW_DIR`, then re-invoke
+> `/pod-create-skill`.
+
+If `SKILL_MD_MISSING`, the build ran but didn't produce output:
+
+> Build claimed success but `$NEW_DIR/SKILL.md` wasn't created.
+> Check `scripts/discover-skills.ts` — it walks one level under
+> `pod/`. Confirm `$NEW_DIR/SKILL.md.tmpl` exists at exactly that path.
+
+---
+
+## Step 10: Append to the timeline
+
+```bash
+~/Code/pod/bin/pod-timeline-log "$(jq -n \
+  --arg slug "$SLUG" \
+  --arg model "$MODEL_SKILL" \
+  --arg file "$NEW_DIR/SKILL.md.tmpl" \
+  '{skill:"pod-create-skill", thesis:"", event:"created", new_skill:$slug, model_skill:$model, file:$file}')"
+```
+
+`thesis` is empty since the new skill is not thesis-scoped. `model_skill`
+records which existing skill the user picked as the model (or
+"from-scratch").
+
+---
+
+## Step 11: Reflect and log learnings (ETHOS §10)
+
+Log only if substantive. Examples worth logging:
+
+- User picked "from scratch" and described a recurring need that doesn't
+  fit any existing skill — that's a hint about a gap in pod's
+  archetype coverage
+- Build failed for a reason that suggests a missing resolver or a
+  template-system bug worth recording for the next maintainer
+
+Skip routine successful scaffolds.
+
+---
+
+## Step 12: Report and stop
+
+```
+SKILL SCAFFOLDED
+Slug:       <slug>
+Model:      <model-skill-name or "from-scratch">
+Template:   ~/Code/pod/pod/<slug>/SKILL.md.tmpl
+Generated:  ~/Code/pod/pod/<slug>/SKILL.md
+Triggers:   <comma-separated list>
+
+Next steps (not auto-run):
+1. Edit ~/Code/pod/pod/<slug>/SKILL.md.tmpl — fill in the TODO stubs
+2. Rebuild:   cd ~/Code/pod && bun run gen:skill-docs
+3. Commit:    cd ~/Code/pod && git add pod/<slug>/ && git commit
+4. Reinstall: from your workspace, tell Claude
+              "Install pod by following ~/Code/pod/setup.md"
+              The setup procedure picks up new skills and creates the
+              symlink at .claude/skills/pod-<slug>/SKILL.md.
+```
+
+Stop. Do not edit the new template's body. Do not run git. Do not
+modify the workspace's symlinks.
+
+---
+
+## Hard rules
+
+{{HARD_RULES_BASE}}
+- **Never overwrite an existing skill folder.** If `pod/<slug>/`
+  exists, BLOCK with a clear "delete it manually first" message.
+- **Never run `git` commands.** This skill writes files and runs the
+  build. Commit + push + reinstall are the user's responsibility.
+- **Never reinstall symlinks** in the user's workspace. The user
+  reruns `setup.md` when they want to pick up the new skill.
+- **Never edit existing skills.** This skill scaffolds new ones only.
+- **Always run the build** at the end (Step 9). A scaffold without a
+  generated `SKILL.md` is half-done. If the build fails, BLOCK.
+- **Read existing skills at runtime, not from pre-baked archetypes.**
+  pod's existing skills ARE the archetypes. Adding new skills to pod
+  automatically expands the menu of model options. No separate
+  archetype directory to maintain.
